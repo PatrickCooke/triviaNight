@@ -19,10 +19,12 @@ import {
   CalendarDays, 
   Layers, 
   Settings, 
-  MonitorPlay 
+  MonitorPlay,
+  Database
 } from 'lucide-react';
 import EventsPage from './pages/EventsPage';
 import SetsPage from './pages/SetsPage';
+import AllQuestionsPage from './pages/AllQuestionsPage';
 
 const drawerWidth = 240;
 
@@ -75,6 +77,12 @@ export default function App() {
                   <ListItemText primary="Sets" />
                 </ListItemButton>
               </ListItem>
+              <ListItem disablePadding>
+                <ListItemButton selected={activeTab === 'all-questions'} onClick={() => setActiveTab('all-questions')}>
+                  <ListItemIcon><Database /></ListItemIcon>
+                  <ListItemText primary="All Questions" />
+                </ListItemButton>
+              </ListItem>
             </List>
             <Divider />
             <List>
@@ -97,6 +105,7 @@ export default function App() {
           <Toolbar />
           {activeTab === 'events' && <EventsPage />}
           {activeTab === 'sets' && <SetsPage />}
+          {activeTab === 'all-questions' && <AllQuestionsPage />}
         </Box>
       </Box>
     </ThemeProvider>

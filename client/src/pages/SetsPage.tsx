@@ -14,9 +14,11 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  IconButton
+  IconButton,
+  Stack
 } from '@mui/material';
-import { Trash2, Plus, MessageCircleQuestion } from 'lucide-react';
+import { Trash2, Plus, MessageCircleQuestion, Edit2 } from 'lucide-react';
+import QuestionsPage from './QuestionsPage';
 
 interface Set {
   id: number;
@@ -27,7 +29,9 @@ interface Set {
 export default function SetsPage() {
   const [sets, setSets] = useState<Set[]>([]);
   const [open, setOpen] = useState(false);
-  const [newSet, setNewSet] = useState({ name: '', description: '' });
+  const [editingSet, setEditingSet] = useState<Set | null>(null);
+  const [formData, setFormData] = useState({ name: '', description: '' });
+  const [viewingQuestions, setViewingQuestions] = useState<{ id: number; name: string } | null>(null);
 
   const fetchSets = async () => {
     const res = await fetch('/api/sets');
@@ -39,27 +43,53 @@ export default function SetsPage() {
     fetchSets();
   }, []);
 
-  const handleCreate = async () => {
-    await fetch('/api/sets', {
-      method: 'POST',
+  const handleOpenCreate = () => {
+    setEditingSet(null);
+    setFormData({ name: '', description: '' });
+    setOpen(true);
+  };
+
+  const handleOpenEdit = (set: Set) => {
+    setEditingSet(set);
+    setFormData({ name: set.name, description: set.description });
+    setOpen(true);
+  };
+
+  const handleSave = async () => {
+    const url = editingSet ? `/api/sets/${editingSet.id}` : '/api/sets';
+    const method = editingSet ? 'PUT' : 'POST';
+
+    await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newSet),
+      body: JSON.stringify(formData),
     });
     setOpen(false);
-    setNewSet({ name: '', description: '' });
     fetchSets();
   };
 
   const handleDelete = async (id: number) => {
-    await fetch(`/api/sets/${id}`, { method: 'DELETE' });
-    fetchSets();
+    if (confirm('Are you sure? This will also delete all questions in this set.')) {
+      await fetch(`/api/sets/${id}`, { method: 'DELETE' });
+      fetchSets();
+    }
   };
+
+  if (viewingQuestions) {
+    return (
+      <QuestionsPage 
+        setId={viewingQuestions.id} 
+        setName={viewingQuestions.name} 
+        onBack={() => setViewingQuestions(null)} 
+      />
+    );
+  }
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
         <Typography variant="h4">Question Sets</Typography>
-        <Button variant="contained" startIcon={<Plus />} onClick={() => setOpen(true)}>
+        <Button variant="contained" startIcon={<Plus />} onClick={handleOpenCreate}>
           New Set
         </Button>
       </div>
@@ -79,12 +109,17 @@ export default function SetsPage() {
                 <TableCell>{set.name}</TableCell>
                 <TableCell>{set.description}</TableCell>
                 <TableCell align="right">
-                  <IconButton color="primary">
-                    <MessageCircleQuestion size={18} />
-                  </IconButton>
-                  <IconButton color="error" onClick={() => handleDelete(set.id)}>
-                    <Trash2 size={18} />
-                  </IconButton>
+                  <Stack direction="row" spacing={1} justifyContent="flex-end">
+                    <IconButton color="info" onClick={() => setViewingQuestions({ id: set.id, name: set.name })}>
+                      <MessageCircleQuestion size={18} />
+                    </IconButton>
+                    <IconButton color="primary" onClick={() => handleOpenEdit(set)}>
+                      <Edit2 size={18} />
+                    </IconButton>
+                    <IconButton color="error" onClick={() => handleDelete(set.id)}>
+                      <Trash2 size={18} />
+                    </IconButton>
+                  </Stack>
                 </TableCell>
               </TableRow>
             ))}
@@ -93,15 +128,15 @@ export default function SetsPage() {
       </TableContainer>
 
       <Dialog open={open} onClose={() => setOpen(false)}>
-        <DialogTitle>Create New Set</DialogTitle>
+        <DialogTitle>{editingSet ? 'Edit Set' : 'Create New Set'}</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
             margin="dense"
-            label="Set Name (e.g., 'General Trivia')"
+            label="Set Name"
             fullWidth
-            value={newSet.name}
-            onChange={(e) => setNewSet({ ...newSet, name: e.target.value })}
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           />
           <TextField
             margin="dense"
@@ -109,13 +144,13 @@ export default function SetsPage() {
             fullWidth
             multiline
             rows={2}
-            value={newSet.description}
-            onChange={(e) => setNewSet({ ...newSet, description: e.target.value })}
+            value={formData.description}
+            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
           />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={handleCreate} variant="contained">Create</Button>
+          <Button onClick={handleSave} variant="contained">Save</Button>
         </DialogActions>
       </Dialog>
     </div>
