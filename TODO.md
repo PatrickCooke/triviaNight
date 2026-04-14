@@ -1,14 +1,14 @@
 # TriviaNight Project TODOs
 
 ## Infrastructure & Setup
-- [ ] Install dependencies: `npm install better-sqlite3 @mui/material @emotion/react @emotion/styled @mui/icons-material lucide-react`
-- [ ] Add `initDb()` call to the application bootstrap (e.g., in a server entry point or a setup script).
-- [ ] Ensure `better-sqlite3` is rebuilt correctly when moving from macOS to Raspberry Pi (`npm rebuild`).
+- [x] Create a singular command to run both server and client (`npm run dev`).
+- [x] Add `initDb()` call to the application bootstrap.
+- [x] Configure for ES Modules (ESM) and fixed pathing issues.
 
 ## Phase 1: Data Entry & CRUD (Current)
-- [ ] Initialize Vite + React project structure.
-- [ ] Implement **Events** CRUD (Create, Read, Update, Delete).
-- [ ] Implement **Sets** CRUD.
+- [x] Initialize Vite + React project structure.
+- [x] Implement **Events** CRUD (Create, Read, Update, Delete).
+- [/] Implement **Sets** CRUD (In Progress).
 - [ ] Implement **Questions** Management (Multi-Part, Multiple Choice, Matching).
 - [ ] Implement **Event-Set** association logic.
 

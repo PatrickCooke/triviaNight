@@ -3,7 +3,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 const DB_PATH = join(process.cwd(), 'trivia.db');
-const SCHEMA_PATH = join(process.cwd(), 'src/db/db.sql');
+const SCHEMA_PATH = join(process.cwd(), 'server/db.sql');
 
 /**
  * Initialize and export the database connection
