@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { 
   Typography, 
   Button, 
@@ -17,16 +17,19 @@ import {
   Stack,
   FormControl,
   InputLabel,
-  Select
+  Select,
+  Autocomplete,
+  Divider
 } from '@mui/material';
-import { Trash2, Plus, ArrowLeft, Edit2 } from 'lucide-react';
+import { Trash2, Plus, ArrowLeft, Edit2, Link as LinkIcon, Image as ImageIcon, X } from 'lucide-react';
 
 interface Question {
   id: number;
-  set_id: number;
   type: 'multi_part' | 'multiple_choice' | 'matching';
+  category: string;
   prompt: string;
   content: any;
+  media_url?: string;
 }
 
 interface Props {
@@ -37,27 +40,40 @@ interface Props {
 
 export default function QuestionsPage({ setId, setName, onBack }: Props) {
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [allBankQuestions, setAllBankQuestions] = useState<Question[]>([]);
   const [open, setOpen] = useState(false);
+  const [pickOpen, setPickOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   
   const [type, setType] = useState<'multi_part' | 'multiple_choice' | 'matching'>('multiple_choice');
+  const [category, setCategory] = useState('');
   const [prompt, setPrompt] = useState('');
   const [content, setContent] = useState<any>({});
+  const [mediaUrl, setMediaUrl] = useState('');
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchQuestions = async () => {
     const res = await fetch(`/api/sets/${setId}/questions`);
-    const data = await res.json();
-    setQuestions(data);
+    setQuestions(await res.json());
+  };
+
+  const fetchBank = async () => {
+    const res = await fetch('/api/questions');
+    setAllBankQuestions(await res.json());
   };
 
   useEffect(() => {
     fetchQuestions();
+    fetchBank();
   }, [setId]);
 
   const handleOpenCreate = () => {
     setEditingQuestion(null);
     setType('multiple_choice');
+    setCategory('');
     setPrompt('');
+    setMediaUrl('');
     setContent({ correct: '', distractors: ['', '', ''], answers: [''], pairs: [{ left: '', right: '' }] });
     setOpen(true);
   };
@@ -65,7 +81,9 @@ export default function QuestionsPage({ setId, setName, onBack }: Props) {
   const handleOpenEdit = (q: Question) => {
     setEditingQuestion(q);
     setType(q.type);
+    setCategory(q.category || '');
     setPrompt(q.prompt);
+    setMediaUrl(q.media_url || '');
     setContent(q.content);
     setOpen(true);
   };
@@ -77,17 +95,42 @@ export default function QuestionsPage({ setId, setName, onBack }: Props) {
     await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ set_id: setId, type, prompt, content }),
+      body: JSON.stringify({ setId, type, category, prompt, content, media_url: mediaUrl }),
     });
     setOpen(false);
     fetchQuestions();
   };
 
-  const handleDelete = async (id: number) => {
-    if (confirm('Delete this question?')) {
-      await fetch(`/api/questions/${id}`, { method: 'DELETE' });
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('media', file);
+
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await res.json();
+    setMediaUrl(data.url);
+  };
+
+  const handleUnlink = async (qId: number) => {
+    if (confirm('Remove this question from this set?')) {
+      await fetch(`/api/sets/${setId}/questions/${qId}`, { method: 'DELETE' });
       fetchQuestions();
     }
+  };
+
+  const handleLinkExisting = async (qId: number) => {
+    await fetch(`/api/sets/${setId}/questions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ questionId: qId }),
+    });
+    setPickOpen(false);
+    fetchQuestions();
   };
 
   return (
@@ -96,8 +139,11 @@ export default function QuestionsPage({ setId, setName, onBack }: Props) {
         <IconButton onClick={onBack}><ArrowLeft /></IconButton>
         <Typography variant="h4">{setName}: Questions</Typography>
         <Box sx={{ flexGrow: 1 }} />
+        <Button variant="outlined" startIcon={<LinkIcon />} onClick={() => setPickOpen(true)} sx={{ mr: 1 }}>
+          Pick from Bank
+        </Button>
         <Button variant="contained" startIcon={<Plus />} onClick={handleOpenCreate}>
-          Add Question
+          Create New
         </Button>
       </Stack>
 
@@ -105,25 +151,22 @@ export default function QuestionsPage({ setId, setName, onBack }: Props) {
         {questions.map((q) => (
           <Card key={q.id}>
             <CardContent>
-              <Stack direction="row" justifyContent="space-between">
-                <Box sx={{ flexGrow: 1 }}>
-                  <Chip label={q.type.replace('_', ' ')} size="small" color="primary" sx={{ mb: 1 }} />
-                  <Typography variant="h6">{q.prompt}</Typography>
-                  <Box sx={{ mt: 1, color: 'text.secondary', fontSize: '0.9rem' }}>
-                    {q.type === 'multiple_choice' && (
-                      <Typography variant="body2">Correct: <b>{q.content.correct}</b> | Others: {q.content.distractors.join(', ')}</Typography>
-                    )}
-                    {q.type === 'multi_part' && (
-                      <Typography variant="body2">Answers: <b>{q.content.answers.join(', ')}</b></Typography>
-                    )}
-                    {q.type === 'matching' && (
-                      <Typography variant="body2">Pairs: {q.content.pairs.map((p: any) => `${p.left}→${p.right}`).join(', ')}</Typography>
-                    )}
+              <Stack direction="row" spacing={2}>
+                {q.media_url && (
+                  <Box sx={{ width: 100, height: 100, borderRadius: 1, overflow: 'hidden' }}>
+                    <img src={q.media_url} alt="Question media" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </Box>
+                )}
+                <Box sx={{ flexGrow: 1 }}>
+                  <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+                    <Chip label={q.type.replace('_', ' ')} size="small" color="primary" />
+                    {q.category && <Chip label={q.category} size="small" variant="outlined" />}
+                  </Stack>
+                  <Typography variant="h6">{q.prompt}</Typography>
                 </Box>
                 <Stack direction="row" spacing={1}>
                   <IconButton color="primary" onClick={() => handleOpenEdit(q)}><Edit2 size={18} /></IconButton>
-                  <IconButton color="error" onClick={() => handleDelete(q.id)}><Trash2 size={18} /></IconButton>
+                  <IconButton color="error" onClick={() => handleUnlink(q.id)}><Trash2 size={18} /></IconButton>
                 </Stack>
               </Stack>
             </CardContent>
@@ -131,18 +174,27 @@ export default function QuestionsPage({ setId, setName, onBack }: Props) {
         ))}
       </Stack>
 
+      {/* Create/Edit Dialog */}
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="md">
-        <DialogTitle>{editingQuestion ? 'Edit Question' : 'New Question'}</DialogTitle>
+        <DialogTitle>{editingQuestion ? 'Edit Question' : 'Create New Question'}</DialogTitle>
         <DialogContent>
           <Stack spacing={3} sx={{ mt: 1 }}>
-            <FormControl fullWidth>
-              <InputLabel>Type</InputLabel>
-              <Select value={type} label="Type" onChange={(e) => setType(e.target.value as any)}>
-                <MenuItem value="multiple_choice">Multiple Choice</MenuItem>
-                <MenuItem value="multi_part">Multi-Part</MenuItem>
-                <MenuItem value="matching">Matching/Sequencing</MenuItem>
-              </Select>
-            </FormControl>
+            <Stack direction="row" spacing={2}>
+              <FormControl fullWidth>
+                <InputLabel>Type</InputLabel>
+                <Select value={type} label="Type" onChange={(e) => setType(e.target.value as any)}>
+                  <MenuItem value="multiple_choice">Multiple Choice</MenuItem>
+                  <MenuItem value="multi_part">Multi-Part</MenuItem>
+                  <MenuItem value="matching">Matching/Sequencing</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField 
+                fullWidth 
+                label="Category" 
+                value={category} 
+                onChange={(e) => setCategory(e.target.value)} 
+              />
+            </Stack>
             
             <TextField
               fullWidth
@@ -153,7 +205,30 @@ export default function QuestionsPage({ setId, setName, onBack }: Props) {
               onChange={(e) => setPrompt(e.target.value)}
             />
 
-            {/* Content Editors */}
+            {/* Media Upload */}
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>Media (Optional)</Typography>
+              <Stack direction="row" spacing={2} alignItems="center">
+                <Button variant="outlined" startIcon={<ImageIcon />} onClick={() => fileInputRef.current?.click()}>
+                  Upload Image
+                </Button>
+                <input type="file" hidden ref={fileInputRef} onChange={handleUpload} accept="image/*" />
+                {mediaUrl && (
+                  <Box sx={{ position: 'relative' }}>
+                    <img src={mediaUrl} alt="Preview" style={{ height: 60, borderRadius: 4 }} />
+                    <IconButton 
+                      size="small" 
+                      sx={{ position: 'absolute', top: -10, right: -10, bgcolor: 'background.paper' }}
+                      onClick={() => setMediaUrl('')}
+                    >
+                      <X size={14} />
+                    </IconButton>
+                  </Box>
+                )}
+              </Stack>
+            </Box>
+
+            {/* Type-specific content editors */}
             {type === 'multiple_choice' && (
               <Stack spacing={2}>
                 <TextField label="Correct Answer" fullWidth value={content.correct} onChange={(e) => setContent({...content, correct: e.target.value})} />
@@ -174,28 +249,24 @@ export default function QuestionsPage({ setId, setName, onBack }: Props) {
             )}
 
             {type === 'multi_part' && (
-              <Stack spacing={2}>
-                <Typography variant="subtitle2">Answers (comma separated)</Typography>
-                <TextField 
-                  fullWidth 
-                  placeholder="Answer 1, Answer 2..."
-                  value={content.answers?.join(', ')}
-                  onChange={(e) => setContent({...content, answers: e.target.value.split(',').map(s => s.trim())})}
-                />
-              </Stack>
+              <TextField 
+                label="Answers (comma separated)" 
+                fullWidth 
+                value={content.answers?.join(', ')}
+                onChange={(e) => setContent({...content, answers: e.target.value.split(',').map(s => s.trim())})}
+              />
             )}
 
             {type === 'matching' && (
               <Stack spacing={2}>
-                <Typography variant="subtitle2">Pairs/Sequence</Typography>
                 {content.pairs?.map((p: any, i: number) => (
                   <Stack direction="row" spacing={2} key={i}>
-                    <TextField label="Left/Key" fullWidth value={p.left} onChange={(e) => {
+                    <TextField label="Key" fullWidth value={p.left} onChange={(e) => {
                       const newP = [...content.pairs];
                       newP[i] = {...p, left: e.target.value};
                       setContent({...content, pairs: newP});
                     }} />
-                    <TextField label="Right/Value" fullWidth value={p.right} onChange={(e) => {
+                    <TextField label="Value" fullWidth value={p.right} onChange={(e) => {
                       const newP = [...content.pairs];
                       newP[i] = {...p, right: e.target.value};
                       setContent({...content, pairs: newP});
@@ -210,6 +281,22 @@ export default function QuestionsPage({ setId, setName, onBack }: Props) {
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Cancel</Button>
           <Button onClick={handleSave} variant="contained">Save</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Pick from Bank Dialog */}
+      <Dialog open={pickOpen} onClose={() => setPickOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Add Existing Question from Bank</DialogTitle>
+        <DialogContent>
+          <Autocomplete
+            options={allBankQuestions.filter(q => !questions.find(sq => sq.id === q.id))}
+            getOptionLabel={(q) => `[${q.category || 'No Category'}] ${q.prompt}`}
+            onChange={(_, newValue) => newValue && handleLinkExisting(newValue.id)}
+            renderInput={(params) => <TextField {...params} label="Search Question Bank" sx={{ mt: 2 }} />}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPickOpen(false)}>Cancel</Button>
         </DialogActions>
       </Dialog>
     </Box>

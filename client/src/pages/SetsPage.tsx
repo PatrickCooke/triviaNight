@@ -15,7 +15,8 @@ import {
   DialogActions,
   TextField,
   IconButton,
-  Stack
+  Stack,
+  Chip
 } from '@mui/material';
 import { Trash2, Plus, MessageCircleQuestion, Edit2 } from 'lucide-react';
 import QuestionsPage from './QuestionsPage';
@@ -23,6 +24,7 @@ import QuestionsPage from './QuestionsPage';
 interface Set {
   id: number;
   name: string;
+  category: string;
   description: string;
 }
 
@@ -30,7 +32,7 @@ export default function SetsPage() {
   const [sets, setSets] = useState<Set[]>([]);
   const [open, setOpen] = useState(false);
   const [editingSet, setEditingSet] = useState<Set | null>(null);
-  const [formData, setFormData] = useState({ name: '', description: '' });
+  const [formData, setFormData] = useState({ name: '', category: '', description: '' });
   const [viewingQuestions, setViewingQuestions] = useState<{ id: number; name: string } | null>(null);
 
   const fetchSets = async () => {
@@ -45,13 +47,13 @@ export default function SetsPage() {
 
   const handleOpenCreate = () => {
     setEditingSet(null);
-    setFormData({ name: '', description: '' });
+    setFormData({ name: '', category: '', description: '' });
     setOpen(true);
   };
 
   const handleOpenEdit = (set: Set) => {
     setEditingSet(set);
-    setFormData({ name: set.name, description: set.description });
+    setFormData({ name: set.name, category: set.category || '', description: set.description });
     setOpen(true);
   };
 
@@ -69,7 +71,7 @@ export default function SetsPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (confirm('Are you sure? This will also delete all questions in this set.')) {
+    if (confirm('Are you sure? This will only delete the Set, not the Questions in the bank.')) {
       await fetch(`/api/sets/${id}`, { method: 'DELETE' });
       fetchSets();
     }
@@ -99,6 +101,7 @@ export default function SetsPage() {
           <TableHead>
             <TableRow>
               <TableCell>Name</TableCell>
+              <TableCell>Category</TableCell>
               <TableCell>Description</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
@@ -107,6 +110,9 @@ export default function SetsPage() {
             {sets.map((set) => (
               <TableRow key={set.id}>
                 <TableCell>{set.name}</TableCell>
+                <TableCell>
+                  {set.category && <Chip label={set.category} size="small" variant="outlined" />}
+                </TableCell>
                 <TableCell>{set.description}</TableCell>
                 <TableCell align="right">
                   <Stack direction="row" spacing={1} justifyContent="flex-end">
@@ -137,6 +143,14 @@ export default function SetsPage() {
             fullWidth
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          />
+          <TextField
+            margin="dense"
+            label="Set Category"
+            fullWidth
+            placeholder="e.g. History, Bible, Sports"
+            value={formData.category}
+            onChange={(e) => setFormData({ ...formData, category: e.target.value })}
           />
           <TextField
             margin="dense"
