@@ -25,6 +25,7 @@ import {
 import EventsPage from './pages/EventsPage';
 import SetsPage from './pages/SetsPage';
 import AllQuestionsPage from './pages/AllQuestionsPage';
+import PresentationPage from './pages/PresentationPage';
 
 const drawerWidth = 240;
 
@@ -42,6 +43,15 @@ const darkTheme = createTheme({
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('events');
+  const [isPresenting, setIsPresenting] = useState(false);
+
+  if (isPresenting) {
+    return (
+      <ThemeProvider theme={darkTheme}>
+        <PresentationPage onExit={() => setIsPresenting(false)} onOpen={() => {}} onClose={() => {}} />
+      </ThemeProvider>
+    );
+  }
 
   return (
     <ThemeProvider theme={darkTheme}>
@@ -87,9 +97,9 @@ export default function App() {
             <Divider />
             <List>
               <ListItem disablePadding>
-                <ListItemButton>
-                  <ListItemIcon><MonitorPlay /></ListItemIcon>
-                  <ListItemText primary="Launch Presentation" />
+                <ListItemButton onClick={() => setIsPresenting(true)}>
+                  <ListItemIcon><MonitorPlay color="#90caf9" /></ListItemIcon>
+                  <ListItemText primary="Launch Presentation" primaryTypographyProps={{ color: '#90caf9' }} />
                 </ListItemButton>
               </ListItem>
               <ListItem disablePadding>
