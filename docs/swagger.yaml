@@ -1,0 +1,39 @@
+openapi: 3.0.0
+info:
+  title: triviaNight API
+  version: 1.0.0
+  description: Local-first trivia management system
+paths:
+  /api/events:
+    get:
+      summary: List all events
+      responses:
+        '200':
+          description: A list of events
+  /api/sets:
+    get:
+      summary: List all sets
+      responses:
+        '200':
+          description: A list of sets
+  /api/questions:
+    get:
+      summary: Get question bank
+      responses:
+        '200':
+          description: All questions
+  /api/upload:
+    post:
+      summary: Upload media
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                media:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Upload successful

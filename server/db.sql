@@ -12,7 +12,6 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE TABLE IF NOT EXISTS sets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    category TEXT, -- Added for classification
     description TEXT
 );
 
@@ -27,13 +26,11 @@ CREATE TABLE IF NOT EXISTS event_sets (
 CREATE TABLE IF NOT EXISTS questions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     type TEXT CHECK(type IN ('multi_part', 'multiple_choice', 'matching')),
-    category TEXT,
     prompt TEXT NOT NULL,
-    content JSON NOT NULL, -- Stores answers, distractors, or pairs
-    media_url TEXT -- Added for images/audio
+    content JSON NOT NULL -- Stores answers, distractors, or pairs
 );
 
--- 5. Question_Sets (Junction Table - NEW)
+-- 5. Question_Sets (Junction Table)
 CREATE TABLE IF NOT EXISTS question_sets (
     question_id INTEGER REFERENCES questions(id) ON DELETE CASCADE,
     set_id INTEGER REFERENCES sets(id) ON DELETE CASCADE,
@@ -57,7 +54,5 @@ CREATE TABLE IF NOT EXISTS answers (
 );
 
 -- Indexes for performance
-CREATE INDEX IF NOT EXISTS idx_questions_category ON questions(category);
-CREATE INDEX IF NOT EXISTS idx_sets_category ON sets(category);
 CREATE INDEX IF NOT EXISTS idx_question_sets_set_id ON question_sets(set_id);
 CREATE INDEX IF NOT EXISTS idx_teams_event_id ON teams(event_id);

@@ -1,276 +1,211 @@
-import express from 'express';
-import cors from 'cors';
-import multer from 'multer';
+import { createRequire } from 'module';
 import { join, extname } from 'path';
 import { existsSync, mkdirSync } from 'fs';
-import db, { initDb } from './db.js';
+import { getDb, initDb } from './db.js';
+
+const require = createRequire(import.meta.url);
+const express = require('express');
+const cors = require('cors');
+const multer = require('multer');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = 3001;
 
-// Ensure uploads directory exists
 const UPLOADS_DIR = join(process.cwd(), 'public/uploads');
-if (!existsSync(UPLOADS_DIR)) {
-    mkdirSync(UPLOADS_DIR, { recursive: true });
-}
+if (!existsSync(UPLOADS_DIR)) mkdirSync(UPLOADS_DIR, { recursive: true });
 
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(UPLOADS_DIR));
 
-// Initialize database
-initDb();
+// DB Startup
+try {
+    initDb();
+    const db = getDb();
+    const migrations = [
+        { table: 'questions', column: 'media_url', type: 'TEXT' },
+        { table: 'questions', column: 'category', type: 'TEXT' },
+        { table: 'sets', column: 'category', type: 'TEXT' }
+    ];
+    for (const m of migrations) {
+        try {
+            db.prepare(`SELECT ${m.column} FROM ${m.table} LIMIT 1`).get();
+        } catch (e) {
+            db.prepare(`ALTER TABLE ${m.table} ADD COLUMN ${m.column} ${m.type}`).run();
+        }
+    }
+} catch (err) {
+    console.error('>>> [DB] Migration error');
+}
 
 // Multer Setup
 const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, UPLOADS_DIR),
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, file.fieldname + '-' + uniqueSuffix + extname(file.originalname));
+    destination: (_req: any, _file: any, cb: any) => cb(null, UPLOADS_DIR),
+    filename: (_req: any, file: any, cb: any) => {
+        const name = Date.now() + extname(file.originalname);
+        cb(null, name);
     }
 });
 const upload = multer({ storage });
 
-// --- Media API ---
-app.post('/api/upload', upload.single('media'), (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+// --- MEDIA API ---
+app.post('/api/upload', upload.single('media'), (req: any, res: any) => {
+    if (!req.file) return res.status(400).json({ error: 'No file' });
     res.json({ url: `/uploads/${req.file.filename}` });
 });
 
-// --- Events API ---
-app.get('/api/events', (req, res) => {
+// --- EVENTS API ---
+app.get('/api/events', (_req: any, res: any) => {
     try {
-        const events = db.prepare('SELECT * FROM events ORDER BY date DESC').all();
-        res.json(events);
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch events' });
-    }
+        res.json(getDb().prepare('SELECT * FROM events ORDER BY date DESC').all());
+    } catch (e) { res.status(500).json([]); }
 });
 
-app.post('/api/events', (req, res) => {
-    const { title, date, location } = req.body;
+app.post('/api/events', (req: any, res: any) => {
     try {
-        const info = db.prepare('INSERT INTO events (title, date, location) VALUES (?, ?, ?)')
+        const { title, date, location } = req.body;
+        const info = getDb().prepare('INSERT INTO events (title, date, location) VALUES (?, ?, ?)')
             .run(title, date || new Date().toISOString(), location);
-        res.status(201).json({ id: info.lastInsertRowid, title, date, location });
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to create event' });
-    }
+        res.status(201).json({ id: info.lastInsertRowid });
+    } catch (e) { res.status(500).json({ error: 'fail' }); }
 });
 
-app.put('/api/events/:id', (req, res) => {
-    const { id } = req.params;
-    const { title, date, location } = req.body;
+app.put('/api/events/:id', (req: any, res: any) => {
     try {
-        db.prepare('UPDATE events SET title = ?, date = ?, location = ? WHERE id = ?')
-            .run(title, date, location, id);
-        res.json({ message: 'Event updated' });
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to update event' });
-    }
+        const { title, date, location } = req.body;
+        getDb().prepare('UPDATE events SET title = ?, date = ?, location = ? WHERE id = ?')
+            .run(title, date, location, req.params.id);
+        res.json({ message: 'updated' });
+    } catch (e) { res.status(500).json({ error: 'fail' }); }
 });
 
-app.delete('/api/events/:id', (req, res) => {
-    const { id } = req.params;
+app.delete('/api/events/:id', (req: any, res: any) => {
     try {
-        db.prepare('DELETE FROM events WHERE id = ?').run(id);
-        res.json({ message: 'Event deleted' });
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to delete event' });
-    }
+        getDb().prepare('DELETE FROM events WHERE id = ?').run(req.params.id);
+        res.json({ message: 'deleted' });
+    } catch (e) { res.status(500).json({ error: 'fail' }); }
 });
 
-// --- Sets API ---
-app.get('/api/sets', (req, res) => {
+// --- SETS API ---
+app.get('/api/sets', (_req: any, res: any) => {
     try {
-        const sets = db.prepare('SELECT * FROM sets ORDER BY name ASC').all();
-        res.json(sets);
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch sets' });
-    }
+        res.json(getDb().prepare('SELECT * FROM sets ORDER BY name ASC').all());
+    } catch (e) { res.status(500).json([]); }
 });
 
-app.post('/api/sets', (req, res) => {
-    const { name, category, description } = req.body;
+app.post('/api/sets', (req: any, res: any) => {
     try {
-        const info = db.prepare('INSERT INTO sets (name, category, description) VALUES (?, ?, ?)')
-            .run(name, category, description);
-        res.status(201).json({ id: info.lastInsertRowid, name, category, description });
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to create set' });
-    }
+        const { name, category, description } = req.body;
+        const info = getDb().prepare('INSERT INTO sets (name, category, description) VALUES (?, ?, ?)')
+            .run(name, category || '', description);
+        res.status(201).json({ id: info.lastInsertRowid });
+    } catch (e) { res.status(500).json({ error: 'fail' }); }
 });
 
-app.put('/api/sets/:id', (req, res) => {
-    const { id } = req.params;
-    const { name, category, description } = req.body;
+app.put('/api/sets/:id', (req: any, res: any) => {
     try {
-        db.prepare('UPDATE sets SET name = ?, category = ?, description = ? WHERE id = ?')
-            .run(name, category, description, id);
-        res.json({ message: 'Set updated' });
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to update set' });
-    }
+        const { name, category, description } = req.body;
+        getDb().prepare('UPDATE sets SET name = ?, category = ?, description = ? WHERE id = ?')
+            .run(name, category, description, req.params.id);
+        res.json({ message: 'updated' });
+    } catch (e) { res.status(500).json({ error: 'fail' }); }
 });
 
-app.delete('/api/sets/:id', (req, res) => {
-    const { id } = req.params;
+app.delete('/api/sets/:id', (req: any, res: any) => {
     try {
-        db.prepare('DELETE FROM sets WHERE id = ?').run(id);
-        res.json({ message: 'Set deleted' });
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to delete set' });
-    }
+        getDb().prepare('DELETE FROM sets WHERE id = ?').run(req.params.id);
+        res.json({ message: 'deleted' });
+    } catch (e) { res.status(500).json({ error: 'fail' }); }
 });
 
-// --- Questions API (Refactored) ---
-interface QuestionRow {
-    id: number;
-    type: string;
-    category: string;
-    prompt: string;
-    content: string;
-    media_url: string;
-}
-
-app.get('/api/questions', (req, res) => {
+// --- QUESTIONS API ---
+app.get('/api/questions', (_req: any, res: any) => {
     try {
-        const questions = db.prepare('SELECT * FROM questions ORDER BY id DESC').all() as QuestionRow[];
-        res.json(questions.map(q => ({ ...q, content: JSON.parse(q.content) })));
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch questions from bank' });
-    }
+        const rows = getDb().prepare('SELECT * FROM questions ORDER BY id DESC').all();
+        res.json(rows.map((q: any) => ({ ...q, content: JSON.parse(q.content) })));
+    } catch (e) { res.status(500).json([]); }
 });
 
-app.get('/api/sets/:setId/questions', (req, res) => {
-    const { setId } = req.params;
+app.post('/api/questions', (req: any, res: any) => {
     try {
-        const questions = db.prepare(`
-            SELECT q.* FROM questions q
-            JOIN question_sets qs ON q.id = qs.question_id
-            WHERE qs.set_id = ?
-            ORDER BY q.id ASC
-        `).all(setId) as QuestionRow[];
-        res.json(questions.map(q => ({ ...q, content: JSON.parse(q.content) })));
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch questions for set' });
-    }
-});
-
-app.post('/api/questions', (req, res) => {
-    const { type, category, prompt, content, media_url, setId } = req.body;
-    try {
+        const { type, category, prompt, content, media_url, setId } = req.body;
+        const db = getDb();
         const info = db.prepare('INSERT INTO questions (type, category, prompt, content, media_url) VALUES (?, ?, ?, ?, ?)')
-            .run(type, category, prompt, JSON.stringify(content), media_url);
-        const questionId = info.lastInsertRowid;
-        if (setId) {
-            db.prepare('INSERT INTO question_sets (question_id, set_id) VALUES (?, ?)').run(questionId, setId);
-        }
-        res.status(201).json({ id: questionId, type, category, prompt, content, media_url });
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to create question' });
-    }
+            .run(type, category || '', prompt, JSON.stringify(content), media_url || '');
+        const qId = info.lastInsertRowid;
+        if (setId) db.prepare('INSERT INTO question_sets (question_id, set_id) VALUES (?, ?)').run(qId, setId);
+        res.status(201).json({ id: qId });
+    } catch (e) { res.status(500).json({ error: 'fail' }); }
 });
 
-app.put('/api/questions/:id', (req, res) => {
-    const { id } = req.params;
-    const { type, category, prompt, content, media_url } = req.body;
+app.put('/api/questions/:id', (req: any, res: any) => {
     try {
-        db.prepare('UPDATE questions SET type = ?, category = ?, prompt = ?, content = ?, media_url = ? WHERE id = ?')
-            .run(type, category, prompt, JSON.stringify(content), media_url, id);
-        res.json({ message: 'Question updated' });
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to update question' });
-    }
+        const { type, category, prompt, content, media_url } = req.body;
+        getDb().prepare('UPDATE questions SET type = ?, category = ?, prompt = ?, content = ?, media_url = ? WHERE id = ?')
+            .run(type, category, prompt, JSON.stringify(content), media_url, req.params.id);
+        res.json({ message: 'updated' });
+    } catch (e) { res.status(500).json({ error: 'fail' }); }
 });
 
-// Link existing question to a set
-app.post('/api/sets/:setId/questions', (req, res) => {
-    const { setId } = req.params;
-    const { questionId } = req.body;
+app.delete('/api/questions/:id', (req: any, res: any) => {
     try {
-        db.prepare('INSERT INTO question_sets (question_id, set_id) VALUES (?, ?)').run(questionId, setId);
-        res.json({ message: 'Question linked to set' });
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to link question' });
-    }
+        getDb().prepare('DELETE FROM questions WHERE id = ?').run(req.params.id);
+        res.json({ message: 'deleted' });
+    } catch (e) { res.status(500).json({ error: 'fail' }); }
 });
 
-// Unlink question from a set
-app.delete('/api/sets/:setId/questions/:questionId', (req, res) => {
-    const { setId, questionId } = req.params;
+// --- MAPPING API (Junctions) ---
+app.get('/api/events/:id/sets', (req: any, res: any) => {
     try {
-        db.prepare('DELETE FROM question_sets WHERE set_id = ? AND question_id = ?').run(setId, questionId);
-        res.json({ message: 'Question unlinked' });
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to unlink question' });
-    }
+        const rows = getDb().prepare('SELECT s.* FROM sets s JOIN event_sets es ON s.id = es.set_id WHERE es.event_id = ?').all(req.params.id);
+        res.json(rows);
+    } catch (e) { res.status(500).json([]); }
 });
 
-app.delete('/api/questions/:id', (req, res) => {
-    const { id } = req.params;
+app.post('/api/events/:id/sets', (req: any, res: any) => {
     try {
-        db.prepare('DELETE FROM questions WHERE id = ?').run(id);
-        res.json({ message: 'Question deleted from bank' });
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to delete question' });
-    }
+        getDb().prepare('INSERT INTO event_sets (event_id, set_id) VALUES (?, ?)').run(req.params.id, req.body.set_id);
+        res.json({ message: 'linked' });
+    } catch (e) { res.status(500).json({ error: 'fail' }); }
 });
 
-// --- Bulk Import API ---
-app.post('/api/questions/bulk', (req, res) => {
-    const { questions } = req.body;
-    if (!Array.isArray(questions)) return res.status(400).json({ error: 'Invalid data' });
-
-    const insert = db.prepare('INSERT INTO questions (type, category, prompt, content) VALUES (?, ?, ?, ?)');
-    const insertMany = db.transaction((qs) => {
-        for (const q of qs) insert.run(q.type, q.category, q.prompt, JSON.stringify(q.content));
-    });
-
+app.delete('/api/events/:id/sets/:setId', (req: any, res: any) => {
     try {
-        insertMany(questions);
-        res.json({ message: `Successfully imported ${questions.length} questions` });
-    } catch (error) {
-        res.status(500).json({ error: 'Bulk import failed' });
-    }
+        getDb().prepare('DELETE FROM event_sets WHERE event_id = ? AND set_id = ?').run(req.params.id, req.params.setId);
+        res.json({ message: 'unlinked' });
+    } catch (e) { res.status(500).json({ error: 'fail' }); }
 });
 
-// --- Event-Sets Mapping API ---
-app.get('/api/events/:eventId/sets', (req, res) => {
-    const { eventId } = req.params;
+app.get('/api/sets/:id/questions', (req: any, res: any) => {
     try {
-        const sets = db.prepare(`
-            SELECT s.* FROM sets s
-            JOIN event_sets es ON s.id = es.set_id
-            WHERE es.event_id = ?
-        `).all(eventId);
-        res.json(sets);
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch event sets' });
-    }
+        const rows = getDb().prepare('SELECT q.* FROM questions q JOIN question_sets qs ON q.id = qs.question_id WHERE qs.set_id = ?').all(req.params.id);
+        res.json(rows.map((q: any) => ({ ...q, content: JSON.parse(q.content) })));
+    } catch (e) { res.status(500).json([]); }
 });
 
-app.post('/api/events/:eventId/sets', (req, res) => {
-    const { eventId } = req.params;
-    const { set_id } = req.body;
+app.post('/api/sets/:id/questions', (req: any, res: any) => {
     try {
-        db.prepare('INSERT INTO event_sets (event_id, set_id) VALUES (?, ?)').run(eventId, set_id);
-        res.status(201).json({ message: 'Set added to event' });
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to add set to event' });
-    }
+        getDb().prepare('INSERT INTO question_sets (question_id, set_id) VALUES (?, ?)').run(req.body.questionId, req.params.id);
+        res.json({ message: 'linked' });
+    } catch (e) { res.status(500).json({ error: 'fail' }); }
 });
 
-app.delete('/api/events/:eventId/sets/:setId', (req, res) => {
-    const { eventId, setId } = req.params;
+app.delete('/api/sets/:id/questions/:qId', (req: any, res: any) => {
     try {
-        db.prepare('DELETE FROM event_sets WHERE event_id = ? AND set_id = ?').run(eventId, setId);
-        res.json({ message: 'Set removed from event' });
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to remove set from event' });
-    }
+        getDb().prepare('DELETE FROM question_sets WHERE set_id = ? AND question_id = ?').run(req.params.id, req.params.qId);
+        res.json({ message: 'unlinked' });
+    } catch (e) { res.status(500).json({ error: 'fail' }); }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+app.post('/api/questions/bulk', (req: any, res: any) => {
+    try {
+        const insert = getDb().prepare('INSERT INTO questions (type, category, prompt, content) VALUES (?, ?, ?, ?)');
+        const insertMany = getDb().transaction((qs: any) => {
+            for (const q of qs) insert.run(q.type, q.category || '', q.prompt, JSON.stringify(q.content));
+        });
+        insertMany(req.body.questions);
+        res.json({ message: 'success' });
+    } catch (e) { res.status(500).json({ error: 'fail' }); }
 });
+
+app.listen(PORT, () => console.log(`>>> [READY] http://localhost:${PORT}`));

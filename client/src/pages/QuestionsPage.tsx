@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Typography, 
   Button, 
@@ -13,15 +13,11 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  MenuItem,
   Stack,
-  FormControl,
-  InputLabel,
-  Select,
-  Autocomplete,
-  Divider
+  Autocomplete
 } from '@mui/material';
-import { Trash2, Plus, ArrowLeft, Edit2, Link as LinkIcon, Image as ImageIcon, X } from 'lucide-react';
+import { Trash2, Plus, ArrowLeft, Edit2, Link as LinkIcon } from 'lucide-react';
+import QuestionEditor from '../components/QuestionEditor';
 
 interface Question {
   id: number;
@@ -41,18 +37,10 @@ interface Props {
 export default function QuestionsPage({ setId, setName, onBack }: Props) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [allBankQuestions, setAllBankQuestions] = useState<Question[]>([]);
-  const [open, setOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [pickOpen, setPickOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   
-  const [type, setType] = useState<'multi_part' | 'multiple_choice' | 'matching'>('multiple_choice');
-  const [category, setCategory] = useState('');
-  const [prompt, setPrompt] = useState('');
-  const [content, setContent] = useState<any>({});
-  const [mediaUrl, setMediaUrl] = useState('');
-  
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const fetchQuestions = async () => {
     const res = await fetch(`/api/sets/${setId}/questions`);
     setQuestions(await res.json());
@@ -70,50 +58,29 @@ export default function QuestionsPage({ setId, setName, onBack }: Props) {
 
   const handleOpenCreate = () => {
     setEditingQuestion(null);
-    setType('multiple_choice');
-    setCategory('');
-    setPrompt('');
-    setMediaUrl('');
-    setContent({ correct: '', distractors: ['', '', ''], answers: [''], pairs: [{ left: '', right: '' }] });
-    setOpen(true);
+    setEditorOpen(true);
   };
 
   const handleOpenEdit = (q: Question) => {
     setEditingQuestion(q);
-    setType(q.type);
-    setCategory(q.category || '');
-    setPrompt(q.prompt);
-    setMediaUrl(q.media_url || '');
-    setContent(q.content);
-    setOpen(true);
+    setEditorOpen(true);
   };
 
-  const handleSave = async () => {
-    const url = editingQuestion ? `/api/questions/${editingQuestion.id}` : '/api/questions';
-    const method = editingQuestion ? 'PUT' : 'POST';
+  const handleSaveQuestion = async (qData: any) => {
+    const isNew = !qData.id;
+    const url = isNew ? '/api/questions' : `/api/questions/${qData.id}`;
+    const method = isNew ? 'POST' : 'PUT';
     
+    // If it's new and we're in a set view, pass setId to link it automatically
+    const payload = isNew ? { ...qData, setId } : qData;
+
     await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ setId, type, category, prompt, content, media_url: mediaUrl }),
+      body: JSON.stringify(payload),
     });
-    setOpen(false);
+    setEditorOpen(false);
     fetchQuestions();
-  };
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('media', file);
-
-    const res = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData,
-    });
-    const data = await res.json();
-    setMediaUrl(data.url);
   };
 
   const handleUnlink = async (qId: number) => {
@@ -153,8 +120,8 @@ export default function QuestionsPage({ setId, setName, onBack }: Props) {
             <CardContent>
               <Stack direction="row" spacing={2}>
                 {q.media_url && (
-                  <Box sx={{ width: 100, height: 100, borderRadius: 1, overflow: 'hidden' }}>
-                    <img src={q.media_url} alt="Question media" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <Box sx={{ width: 80, height: 80, borderRadius: 1, overflow: 'hidden' }}>
+                    <img src={q.media_url} alt="media" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </Box>
                 )}
                 <Box sx={{ flexGrow: 1 }}>
@@ -172,117 +139,19 @@ export default function QuestionsPage({ setId, setName, onBack }: Props) {
             </CardContent>
           </Card>
         ))}
+        {questions.length === 0 && (
+          <Paper sx={{ p: 4, textAlign: 'center', bgcolor: 'transparent', border: '1px dashed grey' }}>
+            <Typography color="text.secondary">No questions in this set.</Typography>
+          </Paper>
+        )}
       </Stack>
 
-      {/* Create/Edit Dialog */}
-      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="md">
-        <DialogTitle>{editingQuestion ? 'Edit Question' : 'Create New Question'}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={3} sx={{ mt: 1 }}>
-            <Stack direction="row" spacing={2}>
-              <FormControl fullWidth>
-                <InputLabel>Type</InputLabel>
-                <Select value={type} label="Type" onChange={(e) => setType(e.target.value as any)}>
-                  <MenuItem value="multiple_choice">Multiple Choice</MenuItem>
-                  <MenuItem value="multi_part">Multi-Part</MenuItem>
-                  <MenuItem value="matching">Matching/Sequencing</MenuItem>
-                </Select>
-              </FormControl>
-              <TextField 
-                fullWidth 
-                label="Category" 
-                value={category} 
-                onChange={(e) => setCategory(e.target.value)} 
-              />
-            </Stack>
-            
-            <TextField
-              fullWidth
-              label="Question Prompt"
-              multiline
-              rows={3}
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-            />
-
-            {/* Media Upload */}
-            <Box>
-              <Typography variant="subtitle2" gutterBottom>Media (Optional)</Typography>
-              <Stack direction="row" spacing={2} alignItems="center">
-                <Button variant="outlined" startIcon={<ImageIcon />} onClick={() => fileInputRef.current?.click()}>
-                  Upload Image
-                </Button>
-                <input type="file" hidden ref={fileInputRef} onChange={handleUpload} accept="image/*" />
-                {mediaUrl && (
-                  <Box sx={{ position: 'relative' }}>
-                    <img src={mediaUrl} alt="Preview" style={{ height: 60, borderRadius: 4 }} />
-                    <IconButton 
-                      size="small" 
-                      sx={{ position: 'absolute', top: -10, right: -10, bgcolor: 'background.paper' }}
-                      onClick={() => setMediaUrl('')}
-                    >
-                      <X size={14} />
-                    </IconButton>
-                  </Box>
-                )}
-              </Stack>
-            </Box>
-
-            {/* Type-specific content editors */}
-            {type === 'multiple_choice' && (
-              <Stack spacing={2}>
-                <TextField label="Correct Answer" fullWidth value={content.correct} onChange={(e) => setContent({...content, correct: e.target.value})} />
-                {content.distractors?.map((d: string, i: number) => (
-                  <TextField 
-                    key={i} 
-                    label={`Distractor ${i+1}`} 
-                    fullWidth 
-                    value={d} 
-                    onChange={(e) => {
-                      const newD = [...content.distractors];
-                      newD[i] = e.target.value;
-                      setContent({...content, distractors: newD});
-                    }} 
-                  />
-                ))}
-              </Stack>
-            )}
-
-            {type === 'multi_part' && (
-              <TextField 
-                label="Answers (comma separated)" 
-                fullWidth 
-                value={content.answers?.join(', ')}
-                onChange={(e) => setContent({...content, answers: e.target.value.split(',').map(s => s.trim())})}
-              />
-            )}
-
-            {type === 'matching' && (
-              <Stack spacing={2}>
-                {content.pairs?.map((p: any, i: number) => (
-                  <Stack direction="row" spacing={2} key={i}>
-                    <TextField label="Key" fullWidth value={p.left} onChange={(e) => {
-                      const newP = [...content.pairs];
-                      newP[i] = {...p, left: e.target.value};
-                      setContent({...content, pairs: newP});
-                    }} />
-                    <TextField label="Value" fullWidth value={p.right} onChange={(e) => {
-                      const newP = [...content.pairs];
-                      newP[i] = {...p, right: e.target.value};
-                      setContent({...content, pairs: newP});
-                    }} />
-                  </Stack>
-                ))}
-                <Button onClick={() => setContent({...content, pairs: [...content.pairs, {left: '', right: ''}]})}>Add Pair</Button>
-              </Stack>
-            )}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained">Save</Button>
-        </DialogActions>
-      </Dialog>
+      <QuestionEditor 
+        open={editorOpen} 
+        onClose={() => setEditorOpen(false)} 
+        onSave={handleSaveQuestion} 
+        initialData={editingQuestion} 
+      />
 
       {/* Pick from Bank Dialog */}
       <Dialog open={pickOpen} onClose={() => setPickOpen(false)} fullWidth maxWidth="sm">

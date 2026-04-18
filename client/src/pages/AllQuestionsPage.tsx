@@ -21,6 +21,7 @@ import {
   Button
 } from '@mui/material';
 import { Search, Plus, Edit2, Trash2, FileUp } from 'lucide-react';
+import QuestionEditor from '../components/QuestionEditor';
 
 interface Question {
   id: number;
@@ -36,6 +37,9 @@ export default function AllQuestionsPage() {
   const [search, setSearch] = useState('');
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkData, setBulkData] = useState('');
+  
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
 
   const fetchAllQuestions = async () => {
     const res = await fetch('/api/questions');
@@ -62,6 +66,19 @@ export default function AllQuestionsPage() {
     }
   };
 
+  const handleSaveQuestion = async (qData: any) => {
+    const url = qData.id ? `/api/questions/${qData.id}` : '/api/questions';
+    const method = qData.id ? 'PUT' : 'POST';
+    
+    await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(qData),
+    });
+    setEditorOpen(false);
+    fetchAllQuestions();
+  };
+
   const handleDelete = async (id: number) => {
     if (confirm('Permanently delete this question from the bank?')) {
       await fetch(`/api/questions/${id}`, { method: 'DELETE' });
@@ -79,9 +96,14 @@ export default function AllQuestionsPage() {
     <Box>
       <Stack direction="row" justifyContent="space-between" sx={{ mb: 3 }}>
         <Typography variant="h4">Question Bank</Typography>
-        <Button variant="outlined" startIcon={<FileUp />} onClick={() => setBulkOpen(true)}>
-          Bulk Import (JSON)
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button variant="outlined" startIcon={<FileUp />} onClick={() => setBulkOpen(true)}>
+            Bulk Import
+          </Button>
+          <Button variant="contained" startIcon={<Plus />} onClick={() => { setEditingQuestion(null); setEditorOpen(true); }}>
+            Add Question
+          </Button>
+        </Stack>
       </Stack>
       
       <TextField
@@ -117,11 +139,12 @@ export default function AllQuestionsPage() {
                   <Chip label={q.category || 'Uncategorized'} size="small" variant="outlined" />
                 </TableCell>
                 <TableCell>
-                  <Chip label={q.type} size="small" color="primary" />
+                  <Chip label={q.type.replace('_', ' ')} size="small" color="primary" />
                 </TableCell>
                 <TableCell sx={{ maxWidth: 400 }}>{q.prompt}</TableCell>
                 <TableCell align="right">
                   <Stack direction="row" spacing={1} justifyContent="flex-end">
+                    <IconButton color="primary" onClick={() => { setEditingQuestion(q); setEditorOpen(true); }}><Edit2 size={18} /></IconButton>
                     <IconButton color="error" onClick={() => handleDelete(q.id)}><Trash2 size={18} /></IconButton>
                   </Stack>
                 </TableCell>
@@ -130,6 +153,13 @@ export default function AllQuestionsPage() {
           </TableBody>
         </Table>
       </TableContainer>
+
+      <QuestionEditor 
+        open={editorOpen} 
+        onClose={() => setEditorOpen(false)} 
+        onSave={handleSaveQuestion} 
+        initialData={editingQuestion} 
+      />
 
       {/* Bulk Import Dialog */}
       <Dialog open={bulkOpen} onClose={() => setBulkOpen(false)} fullWidth maxWidth="md">
