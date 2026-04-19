@@ -25,30 +25,18 @@ export default function SlideController({ event, onExit }: { event: any; onExit:
 
   const buildSlides = useCallback(async () => {
     const slideList: Slide[] = [];
-    
-    // 1. Event Title Slide
     slideList.push({ type: 'event_title', title: event.title });
-
-    // 2. Fetch Sets for this Event
     const setsRes = await fetch(`/api/events/${event.id}/sets`);
     const sets = await setsRes.json();
-
     for (const set of sets) {
-      // 3. Set Title Slide (Round Start)
       slideList.push({ type: 'set_title', title: set.name });
-
-      // 4. Fetch Questions for this Set
       const qRes = await fetch(`/api/sets/${set.id}/questions`);
       const questions = await qRes.json();
-
       for (const q of questions) {
         slideList.push({ type: 'question', data: q });
       }
     }
-
-    // 5. End Slide
     slideList.push({ type: 'event_end', title: 'End of Round' });
-
     setSlides(slideList);
   }, [event]);
 
@@ -76,7 +64,6 @@ export default function SlideController({ event, onExit }: { event: any; onExit:
 
   const currentSlide = slides[currentIndex];
 
-  // Helper for rendering non-question slides (Titles/End)
   const renderCenteredSlide = (title: string, subtitle: string, color: string) => (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
       <Stack spacing={4} sx={{ textAlign: 'center' }}>
@@ -108,14 +95,9 @@ export default function SlideController({ event, onExit }: { event: any; onExit:
           {currentSlide.type === 'event_title' && renderCenteredSlide(currentSlide.title || '', 'Welcome to Trivia Night', '#90caf9')}
           {currentSlide.type === 'set_title' && renderCenteredSlide(currentSlide.title || '', 'Starting Round', '#f48fb1')}
           {currentSlide.type === 'event_end' && renderCenteredSlide(currentSlide.title || '', 'Click to finish', '#90caf9')}
-
-          {currentSlide.type === 'question' && (
-            <QuestionDisplay question={currentSlide.data} />
-          )}
+          {currentSlide.type === 'question' && <QuestionDisplay question={currentSlide.data} />}
         </Box>
       </Fade>
-
-      {/* Progress Indicator */}
       <Box sx={{ position: 'absolute', bottom: 30, left: '20%', width: '60%', height: 6, bgcolor: 'rgba(255,255,255,0.1)', borderRadius: 3 }}>
         <Box sx={{ 
           width: `${((currentIndex + 1) / slides.length) * 100}%`, 
@@ -143,75 +125,32 @@ function QuestionDisplay({ question }: { question: any }) {
     };
   }, [question]);
 
+  const sequenceData = useMemo(() => {
+    if (question.type !== 'sequencing') return null;
+    return shuffle(question.content.items || []);
+  }, [question]);
+
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      {/* 1. Top Spacer + Fixed Title Position (approx 1/3 down for title center) */}
       <Box sx={{ height: '20vh' }} />
-      
-      {/* 2. Locked Title */}
-      <Typography variant="h4" sx={{ 
-        fontWeight: 700, 
-        color: '#90caf9', 
-        textTransform: 'uppercase', 
-        letterSpacing: 6,
-        minHeight: '2em', // Reserve space even if empty
-        textAlign: 'center'
-      }}>
+      <Typography variant="h4" sx={{ fontWeight: 700, color: '#90caf9', textTransform: 'uppercase', letterSpacing: 6, minHeight: '2em', textAlign: 'center' }}>
         {question.title || ' '}
       </Typography>
-
-      {/* 3. Main Content Area */}
-      <Box sx={{ 
-        flexGrow: 1, 
-        width: '90vw', 
-        display: 'flex', 
-        flexDirection: 'column', 
-        justifyContent: question.type === 'multi_part' ? 'center' : 'flex-start',
-        alignItems: 'center',
-        pb: 10 // Space for progress bar
-      }}>
-        
-        {/* Media (if exists) - pushed up slightly in MC/Matching */}
+      <Box sx={{ flexGrow: 1, width: '90vw', display: 'flex', flexDirection: 'column', justifyContent: question.type === 'multi_part' ? 'center' : 'flex-start', alignItems: 'center', pb: 10 }}>
         {question.media_url && (
           <Box sx={{ flexShrink: 1, maxHeight: '25vh', display: 'flex', justifyContent: 'center', mb: 2 }}>
-            <img 
-              src={question.media_url} 
-              alt="media" 
-              style={{ maxHeight: '100%', maxWidth: '100%', borderRadius: 12, border: '4px solid #222', objectFit: 'contain' }} 
-            />
+            <img src={question.media_url} alt="media" style={{ maxHeight: '100%', maxWidth: '100%', borderRadius: 12, border: '4px solid #222', objectFit: 'contain' }} />
           </Box>
         )}
-        
-        {/* Prompt */}
-        <Typography variant="h2" sx={{ 
-          fontWeight: 700, 
-          fontSize: question.prompt.length > 100 ? '2.5rem' : '3.5rem',
-          lineHeight: 1.1,
-          textAlign: 'center',
-          maxWidth: '100%',
-          mb: 4
-        }}>
+        <Typography variant="h2" sx={{ fontWeight: 700, fontSize: question.prompt.length > 100 ? '2.5rem' : '3.5rem', lineHeight: 1.1, textAlign: 'center', maxWidth: '100%', mb: 4 }}>
           {question.prompt}
         </Typography>
 
-        {/* Answer Options (MC/Matching only) */}
         {question.type === 'multiple_choice' && (
           <Grid container spacing={3} sx={{ maxWidth: '1200px' }}>
             {mcOptions.map((opt, i) => (
               <Grid item xs={6} key={i}>
-                <Paper 
-                  sx={{ 
-                    p: 2, 
-                    bgcolor: '#161616', 
-                    color: '#fff', 
-                    textAlign: 'center',
-                    border: '3px solid #333',
-                    minHeight: '100px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                >
+                <Paper sx={{ p: 2, bgcolor: '#161616', color: '#fff', textAlign: 'center', border: '3px solid #333', minHeight: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Typography variant="h4" sx={{ fontWeight: 700 }}>
                     <span style={{ color: '#90caf9' }}>{String.fromCharCode(65 + i)}.</span> {opt}
                   </Typography>
@@ -223,25 +162,19 @@ function QuestionDisplay({ question }: { question: any }) {
 
         {question.type === 'matching' && matchingData && (
           <Grid container spacing={6} justifyContent="center" sx={{ maxWidth: '1200px' }}>
-            <Grid item xs={5}>
-              <Stack spacing={1.5}>
-                {matchingData.left.map((item: any, i: number) => (
-                  <Paper key={i} sx={{ p: 1.5, bgcolor: '#111', color: '#90caf9', border: '2px solid #333', textAlign: 'center' }}>
-                    <Typography variant="h5" sx={{ fontWeight: 700 }}>{item}</Typography>
-                  </Paper>
-                ))}
-              </Stack>
-            </Grid>
-            <Grid item xs={5}>
-              <Stack spacing={1.5}>
-                {matchingData.right.map((item: any, i: number) => (
-                  <Paper key={i} sx={{ p: 1.5, bgcolor: '#111', color: '#f48fb1', border: '2px solid #333', textAlign: 'center' }}>
-                    <Typography variant="h5" sx={{ fontWeight: 700 }}>{item}</Typography>
-                  </Paper>
-                ))}
-              </Stack>
-            </Grid>
+            <Grid item xs={5}><Stack spacing={1.5}>{matchingData.left.map((item: any, i: number) => (<Paper key={i} sx={{ p: 1.5, bgcolor: '#111', color: '#90caf9', border: '2px solid #333', textAlign: 'center' }}><Typography variant="h5" sx={{ fontWeight: 700 }}>{item}</Typography></Paper>))}</Stack></Grid>
+            <Grid item xs={5}><Stack spacing={1.5}>{matchingData.right.map((item: any, i: number) => (<Paper key={i} sx={{ p: 1.5, bgcolor: '#111', color: '#f48fb1', border: '2px solid #333', textAlign: 'center' }}><Typography variant="h5" sx={{ fontWeight: 700 }}>{item}</Typography></Paper>))}</Stack></Grid>
           </Grid>
+        )}
+
+        {question.type === 'sequencing' && sequenceData && (
+          <Stack spacing={2} sx={{ width: '100%', maxWidth: '800px' }}>
+            {sequenceData.map((item: any, i: number) => (
+              <Paper key={i} sx={{ p: 2, bgcolor: '#111', color: '#fff', border: '3px solid #333', textAlign: 'center' }}>
+                <Typography variant="h4" sx={{ fontWeight: 700 }}>{item}</Typography>
+              </Paper>
+            ))}
+          </Stack>
         )}
       </Box>
     </Box>

@@ -13,9 +13,11 @@ import {
   Select, 
   Box, 
   Typography, 
-  IconButton 
+  IconButton,
+  List,
+  ListItem
 } from '@mui/material';
-import { Image as ImageIcon, X, Trash2 } from 'lucide-react';
+import { Image as ImageIcon, X, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 
 interface Question {
   id?: number;
@@ -39,7 +41,13 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
   const [category, setCategory] = useState('');
   const [title, setTitle] = useState('');
   const [prompt, setPrompt] = useState('');
-  const [content, setContent] = useState<any>({ correct: '', distractors: ['', '', ''], answers: [''], pairs: [{ left: '', right: '' }] });
+  const [content, setContent] = useState<any>({ 
+    correct: '', 
+    distractors: ['', '', ''], 
+    answers: [''], 
+    pairs: [{ left: '', right: '' }],
+    items: [''] // For sequencing
+  });
   const [mediaUrl, setMediaUrl] = useState('');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -50,14 +58,23 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
       setCategory(initialData.category || '');
       setTitle(initialData.title || '');
       setPrompt(initialData.prompt);
-      setContent(initialData.content);
+      setContent({
+        correct: '', distractors: ['', '', ''], answers: [''], pairs: [{ left: '', right: '' }], items: [''],
+        ...initialData.content 
+      });
       setMediaUrl(initialData.media_url || '');
     } else {
       setType('multiple_choice');
       setCategory('');
       setTitle('');
       setPrompt('');
-      setContent({ correct: '', distractors: ['', '', ''], answers: [''], pairs: [{ left: '', right: '' }] });
+      setContent({ 
+        correct: '', 
+        distractors: ['', '', ''], 
+        answers: [''], 
+        pairs: [{ left: '', right: '' }],
+        items: [''] 
+      });
       setMediaUrl('');
     }
   }, [initialData, open]);
@@ -84,9 +101,30 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
     });
   };
 
+  // --- Matching Handlers ---
   const deletePair = (index: number) => {
     const newPairs = content.pairs.filter((_: any, i: number) => i !== index);
     setContent({ ...content, pairs: newPairs });
+  };
+
+  // --- Sequencing Handlers ---
+  const updateSequenceItem = (index: number, val: string) => {
+    const newItems = [...content.items];
+    newItems[index] = val;
+    setContent({ ...content, items: newItems });
+  };
+
+  const moveItem = (index: number, direction: 'up' | 'down') => {
+    const newItems = [...content.items];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= newItems.length) return;
+    [newItems[index], newItems[targetIndex]] = [newItems[targetIndex], newItems[index]];
+    setContent({ ...content, items: newItems });
+  };
+
+  const deleteItem = (index: number) => {
+    const newItems = content.items.filter((_: any, i: number) => i !== index);
+    setContent({ ...content, items: newItems });
   };
 
   return (
@@ -100,7 +138,8 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
               <Select value={type} label="Type" onChange={(e) => setType(e.target.value)}>
                 <MenuItem value="multiple_choice">Multiple Choice</MenuItem>
                 <MenuItem value="multi_part">Multi-Part</MenuItem>
-                <MenuItem value="matching">Matching/Sequencing</MenuItem>
+                <MenuItem value="matching">Matching</MenuItem>
+                <MenuItem value="sequencing">Sequencing</MenuItem>
               </Select>
             </FormControl>
             <TextField 
@@ -113,7 +152,7 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
 
           <TextField 
             fullWidth 
-            label="Question Title (Displayed in Presentation)" 
+            label="Question Title" 
             placeholder="e.g. History Round: Question 1"
             value={title} 
             onChange={(e) => setTitle(e.target.value)} 
@@ -199,6 +238,28 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
                 </Stack>
               ))}
               <Button onClick={() => setContent({...content, pairs: [...content.pairs, {left: '', right: ''}]})}>Add Pair</Button>
+            </Stack>
+          )}
+
+          {type === 'sequencing' && (
+            <Stack spacing={2}>
+              <Typography variant="subtitle2">Arrange Items in CORRECT order:</Typography>
+              {content.items?.map((item: string, i: number) => (
+                <Stack direction="row" spacing={1} key={i} alignItems="center">
+                  <Typography sx={{ minWidth: 25, fontWeight: 'bold' }}>{i + 1}.</Typography>
+                  <TextField 
+                    fullWidth 
+                    value={item} 
+                    onChange={(e) => updateSequenceItem(i, e.target.value)} 
+                  />
+                  <IconButton onClick={() => moveItem(i, 'up')} disabled={i === 0} size="small"><ArrowUp size={18}/></IconButton>
+                  <IconButton onClick={() => moveItem(i, 'down')} disabled={i === content.items.length - 1} size="small"><ArrowDown size={18}/></IconButton>
+                  <IconButton color="error" onClick={() => deleteItem(i)} disabled={content.items.length <= 1} size="small">
+                    <Trash2 size={18} />
+                  </IconButton>
+                </Stack>
+              ))}
+              <Button onClick={() => setContent({...content, items: [...content.items, '']})}>Add Item</Button>
             </Stack>
           )}
         </Stack>
