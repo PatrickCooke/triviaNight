@@ -14,10 +14,9 @@ import {
   Box, 
   Typography, 
   IconButton,
-  List,
-  ListItem
+  InputAdornment
 } from '@mui/material';
-import { Image as ImageIcon, X, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
+import { Image as ImageIcon, X, Trash2, ArrowUp, ArrowDown, Plus } from 'lucide-react';
 
 interface Question {
   id?: number;
@@ -46,7 +45,8 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
     distractors: ['', '', ''], 
     answers: [''], 
     pairs: [{ left: '', right: '' }],
-    items: [''] // For sequencing
+    items: [''],
+    parts: [{ text: '', type: 'text', range: '' }] 
   });
   const [mediaUrl, setMediaUrl] = useState('');
   
@@ -58,9 +58,19 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
       setCategory(initialData.category || '');
       setTitle(initialData.title || '');
       setPrompt(initialData.prompt);
+      
+      let normalizedContent = { ...initialData.content };
+      if (initialData.type === 'multi_part' && !normalizedContent.parts) {
+        normalizedContent.parts = (normalizedContent.answers || []).map((a: string) => ({
+          text: a,
+          type: 'text',
+          range: ''
+        }));
+      }
+
       setContent({
-        correct: '', distractors: ['', '', ''], answers: [''], pairs: [{ left: '', right: '' }], items: [''],
-        ...initialData.content 
+        correct: '', distractors: ['', '', ''], answers: [''], pairs: [{ left: '', right: '' }], items: [''], parts: [{ text: '', type: 'text', range: '' }],
+        ...normalizedContent 
       });
       setMediaUrl(initialData.media_url || '');
     } else {
@@ -73,21 +83,12 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
         distractors: ['', '', ''], 
         answers: [''], 
         pairs: [{ left: '', right: '' }],
-        items: [''] 
+        items: [''],
+        parts: [{ text: '', type: 'text', range: '' }]
       });
       setMediaUrl('');
     }
   }, [initialData, open]);
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const formData = new FormData();
-    formData.append('media', file);
-    const res = await fetch('/api/upload', { method: 'POST', body: formData });
-    const data = await res.json();
-    setMediaUrl(data.url);
-  };
 
   const handleLocalSave = async () => {
     await onSave({
@@ -101,30 +102,10 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
     });
   };
 
-  // --- Matching Handlers ---
-  const deletePair = (index: number) => {
-    const newPairs = content.pairs.filter((_: any, i: number) => i !== index);
-    setContent({ ...content, pairs: newPairs });
-  };
-
-  // --- Sequencing Handlers ---
-  const updateSequenceItem = (index: number, val: string) => {
-    const newItems = [...content.items];
-    newItems[index] = val;
-    setContent({ ...content, items: newItems });
-  };
-
-  const moveItem = (index: number, direction: 'up' | 'down') => {
-    const newItems = [...content.items];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= newItems.length) return;
-    [newItems[index], newItems[targetIndex]] = [newItems[targetIndex], newItems[index]];
-    setContent({ ...content, items: newItems });
-  };
-
-  const deleteItem = (index: number) => {
-    const newItems = content.items.filter((_: any, i: number) => i !== index);
-    setContent({ ...content, items: newItems });
+  const updatePart = (index: number, field: string, value: any) => {
+    const newParts = [...content.parts];
+    newParts[index] = { ...newParts[index], [field]: value };
+    setContent({ ...content, parts: newParts });
   };
 
   return (
@@ -142,79 +123,83 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
                 <MenuItem value="sequencing">Sequencing</MenuItem>
               </Select>
             </FormControl>
-            <TextField 
-              fullWidth 
-              label="Category" 
-              value={category} 
-              onChange={(e) => setCategory(e.target.value)} 
-            />
+            <TextField fullWidth label="Category" value={category} onChange={(e) => setCategory(e.target.value)} />
           </Stack>
 
-          <TextField 
-            fullWidth 
-            label="Question Title" 
-            placeholder="e.g. History Round: Question 1"
-            value={title} 
-            onChange={(e) => setTitle(e.target.value)} 
-          />
-          
-          <TextField
-            fullWidth
-            label="Question Prompt"
-            multiline
-            rows={2}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-          />
+          <TextField fullWidth label="Question Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <TextField fullWidth label="Question Prompt" multiline rows={2} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
 
           <Box>
             <Typography variant="subtitle2" gutterBottom>Media (Optional)</Typography>
             <Stack direction="row" spacing={2} alignItems="center">
-              <Button variant="outlined" startIcon={<ImageIcon />} onClick={() => fileInputRef.current?.click()}>
-                Upload Image
-              </Button>
+              <Button variant="outlined" startIcon={<ImageIcon />} onClick={() => fileInputRef.current?.click()}>Upload Image</Button>
               <input type="file" hidden ref={fileInputRef} onChange={handleUpload} accept="image/*" />
               {mediaUrl && (
                 <Box sx={{ position: 'relative' }}>
                   <img src={mediaUrl} alt="Preview" style={{ height: 60, borderRadius: 4 }} />
-                  <IconButton 
-                    size="small" 
-                    sx={{ position: 'absolute', top: -10, right: -10, bgcolor: 'background.paper' }}
-                    onClick={() => setMediaUrl('')}
-                  >
-                    <X size={14} />
-                  </IconButton>
+                  <IconButton size="small" sx={{ position: 'absolute', top: -10, right: -10, bgcolor: 'background.paper' }} onClick={() => setMediaUrl('')}><X size={14} /></IconButton>
                 </Box>
               )}
             </Stack>
           </Box>
 
+          {type === 'multi_part' && (
+            <Stack spacing={2}>
+              <Typography variant="subtitle2">Answer Key (Parts)</Typography>
+              {content.parts?.map((part: any, i: number) => (
+                <Stack direction="row" spacing={2} key={i} alignItems="center">
+                  <FormControl sx={{ minWidth: 120 }}>
+                    <InputLabel>Format</InputLabel>
+                    <Select size="small" value={part.type} label="Format" onChange={(e) => updatePart(i, 'type', e.target.value)}>
+                      <MenuItem value="text">Text</MenuItem>
+                      <MenuItem value="number">Number</MenuItem>
+                    </Select>
+                  </FormControl>
+                  
+                  <TextField 
+                    size="small" 
+                    fullWidth 
+                    type={part.type === 'number' ? 'number' : 'text'}
+                    label={part.type === 'number' ? 'Correct Value' : 'Correct Answer'} 
+                    value={part.text} 
+                    onChange={(e) => updatePart(i, 'text', e.target.value)} 
+                  />
+
+                  {part.type === 'number' && (
+                    <TextField 
+                      size="small" 
+                      sx={{ width: 150 }} 
+                      type="number"
+                      label="Range" 
+                      placeholder="e.g. 100"
+                      InputProps={{ startAdornment: <InputAdornment position="start">±</InputAdornment> }}
+                      value={part.range} 
+                      onChange={(e) => updatePart(i, 'range', e.target.value)} 
+                    />
+                  )}
+
+                  <IconButton color="error" onClick={() => setContent({ ...content, parts: content.parts.filter((_: any, idx: number) => idx !== i) })} disabled={content.parts.length <= 1}>
+                    <Trash2 size={20} />
+                  </IconButton>
+                </Stack>
+              ))}
+              <Button startIcon={<Plus />} onClick={() => setContent({ ...content, parts: [...content.parts, { text: '', type: 'text', range: '' }] })}>
+                Add Answer Part
+              </Button>
+            </Stack>
+          )}
+
           {type === 'multiple_choice' && (
             <Stack spacing={2}>
               <TextField label="Correct Answer" fullWidth value={content.correct} onChange={(e) => setContent({...content, correct: e.target.value})} />
               {content.distractors?.map((d: string, i: number) => (
-                <TextField 
-                  key={i} 
-                  label={`Distractor ${i+1}`} 
-                  fullWidth 
-                  value={d} 
-                  onChange={(e) => {
-                    const newD = [...content.distractors];
-                    newD[i] = e.target.value;
-                    setContent({...content, distractors: newD});
-                  }} 
-                />
+                <TextField key={i} label={`Distractor ${i+1}`} fullWidth value={d} onChange={(e) => {
+                  const newD = [...content.distractors];
+                  newD[i] = e.target.value;
+                  setContent({...content, distractors: newD});
+                }} />
               ))}
             </Stack>
-          )}
-
-          {type === 'multi_part' && (
-            <TextField 
-              label="Answers (comma separated)" 
-              fullWidth 
-              value={content.answers?.join(', ')}
-              onChange={(e) => setContent({...content, answers: e.target.value.split(',').map((s: string) => s.trim())})}
-            />
           )}
 
           {type === 'matching' && (
@@ -232,12 +217,13 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
                     newP[i] = {...p, right: e.target.value};
                     setContent({...content, pairs: newP});
                   }} />
-                  <IconButton color="error" onClick={() => deletePair(i)} disabled={content.pairs.length <= 1}>
-                    <Trash2 size={20} />
-                  </IconButton>
+                  <IconButton color="error" onClick={() => {
+                    const newPairs = content.pairs.filter((_: any, idx: number) => idx !== i);
+                    setContent({ ...content, pairs: newPairs });
+                  }} disabled={content.pairs.length <= 1}><Trash2 size={20} /></IconButton>
                 </Stack>
               ))}
-              <Button onClick={() => setContent({...content, pairs: [...content.pairs, {left: '', right: ''}]})}>Add Pair</Button>
+              <Button startIcon={<Plus />} onClick={() => setContent({...content, pairs: [...content.pairs, {left: '', right: ''}]})}>Add Pair</Button>
             </Stack>
           )}
 
@@ -247,19 +233,29 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
               {content.items?.map((item: string, i: number) => (
                 <Stack direction="row" spacing={1} key={i} alignItems="center">
                   <Typography sx={{ minWidth: 25, fontWeight: 'bold' }}>{i + 1}.</Typography>
-                  <TextField 
-                    fullWidth 
-                    value={item} 
-                    onChange={(e) => updateSequenceItem(i, e.target.value)} 
-                  />
-                  <IconButton onClick={() => moveItem(i, 'up')} disabled={i === 0} size="small"><ArrowUp size={18}/></IconButton>
-                  <IconButton onClick={() => moveItem(i, 'down')} disabled={i === content.items.length - 1} size="small"><ArrowDown size={18}/></IconButton>
-                  <IconButton color="error" onClick={() => deleteItem(i)} disabled={content.items.length <= 1} size="small">
-                    <Trash2 size={18} />
-                  </IconButton>
+                  <TextField fullWidth value={item} onChange={(e) => {
+                    const newItems = [...content.items];
+                    newItems[i] = e.target.value;
+                    setContent({ ...content, items: newItems });
+                  }} />
+                  <IconButton onClick={() => {
+                    const newItems = [...content.items];
+                    if (i > 0) {
+                      [newItems[i], newItems[i-1]] = [newItems[i-1], newItems[i]];
+                      setContent({ ...content, items: newItems });
+                    }
+                  }} disabled={i === 0} size="small"><ArrowUp size={18}/></IconButton>
+                  <IconButton onClick={() => {
+                    const newItems = [...content.items];
+                    if (i < newItems.length - 1) {
+                      [newItems[i], newItems[i+1]] = [newItems[i+1], newItems[i]];
+                      setContent({ ...content, items: newItems });
+                    }
+                  }} disabled={i === content.items.length - 1} size="small"><ArrowDown size={18}/></IconButton>
+                  <IconButton color="error" onClick={() => setContent({ ...content, items: content.items.filter((_: any, idx: number) => idx !== i) })} disabled={content.items.length <= 1} size="small"><Trash2 size={18} /></IconButton>
                 </Stack>
               ))}
-              <Button onClick={() => setContent({...content, items: [...content.items, '']})}>Add Item</Button>
+              <Button startIcon={<Plus />} onClick={() => setContent({...content, items: [...content.items, '']})}>Add Item</Button>
             </Stack>
           )}
         </Stack>

@@ -15,13 +15,14 @@ import {
   DialogActions,
   TextField,
   IconButton,
-  Box,
   Stack,
   Autocomplete,
   Chip,
-  Divider
+  Divider,
+  Box
 } from '@mui/material';
-import { Trash2, Plus, Edit2, Layers } from 'lucide-react';
+import { Trash2, Plus, Edit2, Layers, Gauge } from 'lucide-react';
+import EventDashboard from './EventDashboard';
 
 interface Event {
   id: number;
@@ -43,6 +44,7 @@ export default function EventsPage() {
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [activeEvent, setActiveEvent] = useState<Event | null>(null);
   const [eventSets, setEventSets] = useState<Set[]>([]);
+  const [viewingDashboard, setViewingDashboard] = useState<Event | null>(null);
   
   const [formData, setFormData] = useState({ title: '', date: '', location: '' });
 
@@ -118,6 +120,10 @@ export default function EventsPage() {
     handleManageSets(activeEvent);
   };
 
+  if (viewingDashboard) {
+    return <EventDashboard event={viewingDashboard} onBack={() => setViewingDashboard(null)} />;
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
@@ -145,7 +151,10 @@ export default function EventsPage() {
                 <TableCell>{event.location}</TableCell>
                 <TableCell align="right">
                   <Stack direction="row" spacing={1} justifyContent="flex-end">
-                    <IconButton color="info" onClick={() => handleManageSets(event)}>
+                    <IconButton color="success" onClick={() => setViewingDashboard(event)} title="Event Dashboard">
+                      <Gauge size={18} />
+                    </IconButton>
+                    <IconButton color="info" onClick={() => handleManageSets(event)} title="Manage Rounds">
                       <Layers size={18} />
                     </IconButton>
                     <IconButton color="primary" onClick={() => handleOpenEdit(event)}>
