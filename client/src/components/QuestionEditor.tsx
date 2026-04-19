@@ -15,12 +15,13 @@ import {
   Typography, 
   IconButton 
 } from '@mui/material';
-import { Image as ImageIcon, X } from 'lucide-react';
+import { Image as ImageIcon, X, Trash2 } from 'lucide-react';
 
 interface Question {
   id?: number;
   type: string;
   category: string;
+  title: string;
   prompt: string;
   content: any;
   media_url?: string;
@@ -36,6 +37,7 @@ interface Props {
 export default function QuestionEditor({ open, onClose, onSave, initialData }: Props) {
   const [type, setType] = useState('multiple_choice');
   const [category, setCategory] = useState('');
+  const [title, setTitle] = useState('');
   const [prompt, setPrompt] = useState('');
   const [content, setContent] = useState<any>({ correct: '', distractors: ['', '', ''], answers: [''], pairs: [{ left: '', right: '' }] });
   const [mediaUrl, setMediaUrl] = useState('');
@@ -46,12 +48,14 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
     if (initialData) {
       setType(initialData.type);
       setCategory(initialData.category || '');
+      setTitle(initialData.title || '');
       setPrompt(initialData.prompt);
       setContent(initialData.content);
       setMediaUrl(initialData.media_url || '');
     } else {
       setType('multiple_choice');
       setCategory('');
+      setTitle('');
       setPrompt('');
       setContent({ correct: '', distractors: ['', '', ''], answers: [''], pairs: [{ left: '', right: '' }] });
       setMediaUrl('');
@@ -73,10 +77,16 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
       id: initialData?.id,
       type,
       category,
+      title,
       prompt,
       content,
       media_url: mediaUrl
     });
+  };
+
+  const deletePair = (index: number) => {
+    const newPairs = content.pairs.filter((_: any, i: number) => i !== index);
+    setContent({ ...content, pairs: newPairs });
   };
 
   return (
@@ -100,12 +110,20 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
               onChange={(e) => setCategory(e.target.value)} 
             />
           </Stack>
+
+          <TextField 
+            fullWidth 
+            label="Question Title (Displayed in Presentation)" 
+            placeholder="e.g. History Round: Question 1"
+            value={title} 
+            onChange={(e) => setTitle(e.target.value)} 
+          />
           
           <TextField
             fullWidth
             label="Question Prompt"
             multiline
-            rows={3}
+            rows={2}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
           />
@@ -162,8 +180,9 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
 
           {type === 'matching' && (
             <Stack spacing={2}>
+              <Typography variant="subtitle2">Matching Pairs</Typography>
               {content.pairs?.map((p: any, i: number) => (
-                <Stack direction="row" spacing={2} key={i}>
+                <Stack direction="row" spacing={2} key={i} alignItems="center">
                   <TextField label="Key" fullWidth value={p.left} onChange={(e) => {
                     const newP = [...content.pairs];
                     newP[i] = {...p, left: e.target.value};
@@ -174,6 +193,9 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
                     newP[i] = {...p, right: e.target.value};
                     setContent({...content, pairs: newP});
                   }} />
+                  <IconButton color="error" onClick={() => deletePair(i)} disabled={content.pairs.length <= 1}>
+                    <Trash2 size={20} />
+                  </IconButton>
                 </Stack>
               ))}
               <Button onClick={() => setContent({...content, pairs: [...content.pairs, {left: '', right: ''}]})}>Add Pair</Button>

@@ -25,6 +25,7 @@ try {
     const migrations = [
         { table: 'questions', column: 'media_url', type: 'TEXT' },
         { table: 'questions', column: 'category', type: 'TEXT' },
+        { table: 'questions', column: 'title', type: 'TEXT' },
         { table: 'sets', column: 'category', type: 'TEXT' }
     ];
     for (const m of migrations) {
@@ -128,10 +129,10 @@ app.get('/api/questions', (_req: any, res: any) => {
 
 app.post('/api/questions', (req: any, res: any) => {
     try {
-        const { type, category, prompt, content, media_url, setId } = req.body;
+        const { type, category, title, prompt, content, media_url, setId } = req.body;
         const db = getDb();
-        const info = db.prepare('INSERT INTO questions (type, category, prompt, content, media_url) VALUES (?, ?, ?, ?, ?)')
-            .run(type, category || '', prompt, JSON.stringify(content), media_url || '');
+        const info = db.prepare('INSERT INTO questions (type, category, title, prompt, content, media_url) VALUES (?, ?, ?, ?, ?, ?)')
+            .run(type, category || '', title || '', prompt, JSON.stringify(content), media_url || '');
         const qId = info.lastInsertRowid;
         if (setId) db.prepare('INSERT INTO question_sets (question_id, set_id) VALUES (?, ?)').run(qId, setId);
         res.status(201).json({ id: qId });
@@ -140,9 +141,9 @@ app.post('/api/questions', (req: any, res: any) => {
 
 app.put('/api/questions/:id', (req: any, res: any) => {
     try {
-        const { type, category, prompt, content, media_url } = req.body;
-        getDb().prepare('UPDATE questions SET type = ?, category = ?, prompt = ?, content = ?, media_url = ? WHERE id = ?')
-            .run(type, category, prompt, JSON.stringify(content), media_url, req.params.id);
+        const { type, category, title, prompt, content, media_url } = req.body;
+        getDb().prepare('UPDATE questions SET type = ?, category = ?, title = ?, prompt = ?, content = ?, media_url = ? WHERE id = ?')
+            .run(type, category, title || '', prompt, JSON.stringify(content), media_url, req.params.id);
         res.json({ message: 'updated' });
     } catch (e) { res.status(500).json({ error: 'fail' }); }
 });
