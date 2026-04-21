@@ -21,8 +21,9 @@ import {
   Divider,
   Box
 } from '@mui/material';
-import { Trash2, Plus, Edit2, Layers, Gauge } from 'lucide-react';
+import { Trash2, Plus, Edit2, Layers, Gauge, ClipboardList } from 'lucide-react';
 import EventDashboard from './EventDashboard';
+import TeamScorer from './TeamScorer';
 
 interface Event {
   id: number;
@@ -45,6 +46,7 @@ export default function EventsPage() {
   const [activeEvent, setActiveEvent] = useState<Event | null>(null);
   const [eventSets, setEventSets] = useState<Set[]>([]);
   const [viewingDashboard, setViewingDashboard] = useState<Event | null>(null);
+  const [viewingTeamScorer, setViewingTeamScorer] = useState<Event | null>(null);
   
   const [formData, setFormData] = useState({ title: '', date: '', location: '' });
 
@@ -124,6 +126,10 @@ export default function EventsPage() {
     return <EventDashboard event={viewingDashboard} onBack={() => setViewingDashboard(null)} />;
   }
 
+  if (viewingTeamScorer) {
+    return <TeamScorer event={viewingTeamScorer} onBack={() => setViewingTeamScorer(null)} />;
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
@@ -151,6 +157,9 @@ export default function EventsPage() {
                 <TableCell>{event.location}</TableCell>
                 <TableCell align="right">
                   <Stack direction="row" spacing={1} justifyContent="flex-end">
+                    <IconButton color="warning" onClick={() => setViewingTeamScorer(event)} title="Team Score Sheets">
+                      <ClipboardList size={18} />
+                    </IconButton>
                     <IconButton color="success" onClick={() => setViewingDashboard(event)} title="Event Dashboard">
                       <Gauge size={18} />
                     </IconButton>

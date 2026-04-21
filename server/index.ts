@@ -163,8 +163,20 @@ app.delete('/api/teams/:id', (req, res) => {
     res.json({ message: 'deleted' });
 });
 
-// --- ANSWERS API (Refactored for Granular Scoring) ---
-app.post('/api/answers', (req, res) => {
+// --- ANSWERS API ---
+app.get('/api/events/:id/answers', (req: any, res: any) => {
+    try {
+        const rows = getDb().prepare(`
+            SELECT a.* FROM answers a
+            JOIN teams t ON a.team_id = t.id
+            WHERE t.event_id = ?
+        `).all(req.params.id);
+        res.json(rows);
+    } catch (e) { res.status(500).json([]); }
+});
+
+app.post('/api/answers', (req: any, res: any) => {
+
     const { team_id, question_id, answer_index, is_correct } = req.body;
     const db = getDb();
     const existing = db.prepare('SELECT id FROM answers WHERE team_id = ? AND question_id = ? AND answer_index = ?')

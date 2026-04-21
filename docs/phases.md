@@ -16,8 +16,11 @@ The project is structured to prioritize data integrity and management before the
 
 ## Phase 3: Teams & Live Scoring
 - Add Team registration to Events.
-- Build the "Scorekeeper" interface to record answers during the event.
-- **Goal:** Real-time data collection.
+- Build the "Scorekeeper" interface with granular grid-based scoring.
+- **Milestone: Remote Control (WebSockets)**
+    - Implement real-time synchronization between "Audience" and "Scorekeeper" screens.
+    - Enable multi-device support (e.g., Phone as remote, TV as display).
+- **Goal:** Real-time data collection and synchronized presentation.
 
 ## Phase 4: Analytics & Insights
 - Question Difficulty logic:
