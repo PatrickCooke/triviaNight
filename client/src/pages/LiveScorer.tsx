@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Box, 
   Typography, 
@@ -13,10 +13,20 @@ import {
   TableHead,
   TableRow,
   Checkbox,
-  Avatar,
-  Divider
+  Divider,
+  Switch,
+  FormControlLabel
 } from '@mui/material';
-import { X, ChevronLeft, ChevronRight, Trophy, CheckSquare } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Trophy, CheckSquare, Eye, EyeOff } from 'lucide-react';
+import { io } from 'socket.io-client';
+
+const socket = io();
+
+interface Slide {
+  type: 'event_title' | 'set_title' | 'question' | 'intermission' | 'event_end';
+  title?: string;
+  data?: any;
+}
 
 interface Props {
   event: any;
@@ -26,151 +36,186 @@ interface Props {
 }
 
 export default function LiveScorer({ event, teams, sets, onExit }: Props) {
-  const [questions, setQuestions] = useState<any[]>([]);
+  const [slides, setSlides] = useState<Slide[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [scores, setScores] = useState<Record<string, boolean>>({}); // Key: "teamId-questionId-ansIdx"
-  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [scores, setScores] = useState<Record<string, boolean>>({});
+  const [audienceLeaderboard, setAudienceLeaderboard] = useState(false);
 
+  // 1. Build Shared Slide List
   useEffect(() => {
     const init = async () => {
-      let allQ: any[] = [];
+      const slideList: Slide[] = [];
+      slideList.push({ type: 'event_title', title: event.title });
+
       for (const set of sets) {
+        slideList.push({ type: 'set_title', title: set.name });
         const res = await fetch(`/api/sets/${set.id}/questions`);
-        const data = await res.json();
-        allQ = [...allQ, ...data.map((q: any) => ({ ...q, setName: set.name }))];
+        const questions = await res.json();
+        for (const q of questions) {
+          slideList.push({ type: 'question', data: { ...q, setName: set.name } });
+        }
+        slideList.push({ type: 'intermission', title: `${set.name} Complete` });
       }
-      setQuestions(allQ);
+
+      slideList.push({ type: 'event_end', title: 'Trivia Night Complete' });
+      setSlides(slideList);
+
+      // Join Room
+      socket.emit('join_event', event.id);
+
+      // Load existing scores
+      const aRes = await fetch(`/api/events/${event.id}/answers`);
+      const answerData = await aRes.json();
+      const scoresMap: Record<string, boolean> = {};
+      answerData.forEach((a: any) => {
+        scoresMap[`${a.team_id}-${a.question_id}-${a.answer_index}`] = !!a.is_correct;
+      });
+      setScores(scoresMap);
     };
     init();
-  }, [sets]);
+  }, [event, sets]);
 
-  const handleToggle = async (teamId: number, questionId: number, ansIdx: number, current: boolean) => {
+  // 2. Sync with Audience
+  const syncSlide = useCallback((index: number) => {
+    setCurrentIndex(index);
+    socket.emit('set_slide', { eventId: event.id, index });
+  }, [event.id]);
+
+  const toggleAudienceLeaderboard = (visible: boolean) => {
+    setAudienceLeaderboard(visible);
+    socket.emit('toggle_leaderboard', { eventId: event.id, visible });
+  };
+
+  const handleToggleScore = async (teamId: number, qId: number, ansIdx: number, current: boolean) => {
     const next = !current;
-    const key = `${teamId}-${questionId}-${ansIdx}`;
+    const key = `${teamId}-${qId}-${ansIdx}`;
     setScores(prev => ({ ...prev, [key]: next }));
 
     await fetch('/api/answers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ team_id: teamId, question_id: questionId, answer_index: ansIdx, is_correct: next })
+      body: JSON.stringify({ team_id: teamId, question_id: qId, answer_index: ansIdx, is_correct: next })
     });
   };
 
-  const calculateLeaderboard = () => {
-    return teams.map(team => {
-      const total = Object.keys(scores).filter(k => k.startsWith(`${team.id}-`) && scores[k]).length;
-      return { ...team, score: total };
-    }).sort((a, b) => b.score - a.score);
-  };
+  if (slides.length === 0) return <Box sx={{ p: 4 }}>Initializing Remote Control...</Box>;
 
-  if (questions.length === 0) return <Box sx={{ p: 4 }}>Loading...</Box>;
-
-  if (showLeaderboard) {
-    const ranked = calculateLeaderboard();
-    return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
-        <Typography variant="h3" gutterBottom><Trophy size={40} color="#fbc02d" /> Final Results</Typography>
-        <Paper sx={{ width: '100%', maxWidth: 600, mt: 4 }}>
-          {ranked.map((t, i) => (
-            <Box key={t.id} sx={{ p: 3, display: 'flex', alignItems: 'center', borderBottom: '1px solid #333' }}>
-              <Avatar sx={{ mr: 2, bgcolor: i === 0 ? 'gold' : 'grey' }}>{i + 1}</Avatar>
-              <Typography variant="h5" sx={{ flexGrow: 1 }}>{t.name}</Typography>
-              <Typography variant="h4" sx={{ fontWeight: 'bold' }}>{t.score} pts</Typography>
-            </Box>
-          ))}
-        </Paper>
-        <Button variant="contained" sx={{ mt: 4 }} onClick={onExit}>Exit</Button>
-      </Box>
-    );
-  }
-
-  const currentQ = questions[currentIndex];
-  
-  const answerRows: string[] = [];
-  if (currentQ.type === 'multiple_choice') {
-    answerRows.push(currentQ.content.correct);
-  } else if (currentQ.type === 'multi_part') {
-    currentQ.content.parts.forEach((p: any) => {
-      if (p.type === 'number' && p.range) {
-        const val = parseFloat(p.text);
-        const r = parseFloat(p.range);
-        if (!isNaN(val) && !isNaN(r)) {
-          answerRows.push(`${p.text} ± ${p.range} [${val - r} to ${val + r}]`);
-        } else {
-          answerRows.push(p.text);
-        }
-      } else {
-        answerRows.push(p.text);
-      }
-    });
-  } else if (currentQ.type === 'matching') {
-    currentQ.content.pairs.forEach((p: any) => answerRows.push(`${p.left}: ${p.right}`));
-  } else if (currentQ.type === 'sequencing') {
-    currentQ.content.items.forEach((item: string, i: number) => answerRows.push(`${i + 1}. ${item}`));
-  }
+  const currentSlide = slides[currentIndex];
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-        <Box>
-          <Typography variant="h6" color="primary">{currentQ.setName}</Typography>
-          <Typography variant="h4">{currentQ.title || 'Question'}</Typography>
-        </Box>
-        <IconButton onClick={onExit}><X /></IconButton>
-      </Stack>
-
-      <Paper sx={{ p: 2, mb: 3, bgcolor: 'rgba(255,255,255,0.02)' }}>
-        <Typography variant="h6" color="text.secondary">Prompt:</Typography>
-        <Typography variant="h5" sx={{ mb: 1 }}>{currentQ.prompt}</Typography>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
+      {/* Top Header */}
+      <Paper sx={{ p: 2, mb: 2, borderRadius: 0, borderBottom: '1px solid #333' }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center">
+          <Box>
+            <Typography variant="caption" color="primary" sx={{ textTransform: 'uppercase', fontWeight: 'bold' }}>Remote Control</Typography>
+            <Typography variant="h5">{event.title}</Typography>
+          </Box>
+          <Stack direction="row" spacing={2} alignItems="center">
+            <FormControlLabel
+                control={<Switch checked={audienceLeaderboard} onChange={(e) => toggleAudienceLeaderboard(e.target.checked)} color="secondary" />}
+                label={audienceLeaderboard ? "Leaderboard Public" : "Push Leaderboard"}
+            />
+            <IconButton onClick={onExit}><X /></IconButton>
+          </Stack>
+        </Stack>
       </Paper>
 
-      <TableContainer component={Paper} sx={{ flexGrow: 1, maxHeight: '60vh' }}>
-        <Table stickyHeader>
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ bgcolor: '#1a1a1a', fontWeight: 'bold', width: '30%' }}>Answer Part</TableCell>
-              {teams.map(team => (
-                <TableCell key={team.id} align="center" sx={{ bgcolor: '#1a1a1a', fontWeight: 'bold' }}>
-                  {team.name}
-                </TableCell>
-              ))}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {answerRows.map((ans, ansIdx) => (
-              <TableRow key={ansIdx} hover>
-                <TableCell sx={{ borderRight: '1px solid #333' }}>
-                  <Typography variant="body1">{ans}</Typography>
-                </TableCell>
-                {teams.map(team => {
-                  const isCorrect = !!scores[`${team.id}-${currentQ.id}-${ansIdx}`];
-                  return (
-                    <TableCell key={team.id} align="center">
-                      <Checkbox 
-                        checked={isCorrect}
-                        onChange={() => handleToggle(team.id, currentQ.id, ansIdx, isCorrect)}
-                        icon={<CheckSquare color="#555" />}
-                        checkedIcon={<CheckSquare color="#4caf50" />}
-                        sx={{ '& .MuiSvgIcon-root': { fontSize: 32 } }}
-                      />
-                    </TableCell>
-                  );
-                })}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      {/* Slide Status */}
+      <Box sx={{ p: 2, textAlign: 'center', bgcolor: 'rgba(255,255,255,0.02)', mb: 2 }}>
+        <Typography variant="h6" color="secondary">
+            {currentSlide.type === 'question' ? `QUESTION: ${currentSlide.data.setName}` : currentSlide.type.replace('_', ' ').toUpperCase()}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">Audience is seeing this slide</Typography>
+      </Box>
 
-      <Box sx={{ position: 'fixed', bottom: 20, right: 20, display: 'flex', gap: 2, bgcolor: 'background.paper', p: 1, borderRadius: 2, boxShadow: 6 }}>
-        <Button variant="outlined" startIcon={<ChevronLeft />} disabled={currentIndex === 0} onClick={() => setCurrentIndex(prev => prev - 1)}>Prev</Button>
-        <Typography variant="h6" sx={{ alignSelf: 'center', px: 2 }}>{currentIndex + 1} / {questions.length}</Typography>
-        {currentIndex < questions.length - 1 ? (
-          <Button variant="contained" endIcon={<ChevronRight />} onClick={() => setCurrentIndex(prev => prev + 1)}>Next</Button>
+      {/* Main Content Area */}
+      <Box sx={{ flexGrow: 1, overflow: 'auto', px: 2, pb: 12 }}>
+        {currentSlide.type === 'question' ? (
+          <Box>
+            <Paper sx={{ p: 2, mb: 3, borderLeft: '4px solid #90caf9' }}>
+                <Typography variant="subtitle2" color="text.secondary">Prompt</Typography>
+                <Typography variant="h6">{currentSlide.data.prompt}</Typography>
+            </Paper>
+
+            <TableContainer component={Paper}>
+                <Table size="small">
+                    <TableHead>
+                        <TableRow>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Answer Part</TableCell>
+                            {teams.map(t => <TableCell key={t.id} align="center" sx={{ fontWeight: 'bold' }}>{t.name}</TableCell>)}
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {getAnswerRows(currentSlide.data).map((ans, idx) => (
+                            <TableRow key={idx}>
+                                <TableCell sx={{ fontSize: '0.8rem' }}>{ans}</TableCell>
+                                {teams.map(t => {
+                                    const isCorrect = !!scores[`${t.id}-${currentSlide.data.id}-${idx}`];
+                                    return (
+                                        <TableCell key={t.id} align="center">
+                                            <Checkbox 
+                                                size="small"
+                                                checked={isCorrect}
+                                                onChange={() => handleToggleScore(t.id, currentSlide.data.id, idx, isCorrect)}
+                                                checkedIcon={<CheckSquare color="#4caf50" />}
+                                                icon={<CheckSquare color="#444" />}
+                                            />
+                                        </TableCell>
+                                    );
+                                })}
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+          </Box>
         ) : (
-          <Button variant="contained" color="secondary" endIcon={<Trophy />} onClick={() => setShowLeaderboard(true)}>Leaderboard</Button>
+          <Box sx={{ height: '30vh', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+            <Box>
+                <Typography variant="h4" gutterBottom>{currentSlide.title || 'Slide'}</Typography>
+                <Typography color="text.secondary">This is a title slide. No scoring available.</Typography>
+            </Box>
+          </Box>
         )}
       </Box>
+
+      {/* Persistent Navigation Footer */}
+      <Paper sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, p: 2, bgcolor: 'background.paper', borderTop: '2px solid #333' }}>
+        <Stack direction="row" spacing={2} justifyContent="center" alignItems="center">
+            <Button 
+                variant="outlined" 
+                size="large"
+                startIcon={<ChevronLeft />} 
+                disabled={currentIndex === 0}
+                onClick={() => syncSlide(currentIndex - 1)}
+            >
+                Back
+            </Button>
+            <Box sx={{ textAlign: 'center', minWidth: 120 }}>
+                <Typography variant="h6">{currentIndex + 1} / {slides.length}</Typography>
+                <Typography variant="caption" color="text.secondary">Slide Sequence</Typography>
+            </Box>
+            <Button 
+                variant="contained" 
+                size="large"
+                endIcon={<ChevronRight />} 
+                disabled={currentIndex === slides.length - 1}
+                onClick={() => syncSlide(currentIndex + 1)}
+            >
+                Next
+            </Button>
+        </Stack>
+      </Paper>
     </Box>
   );
+}
+
+function getAnswerRows(q: any): string[] {
+    const rows: string[] = [];
+    if (q.type === 'multiple_choice') rows.push(q.content.correct);
+    else if (q.type === 'multi_part') q.content.parts.forEach((p: any) => rows.push(`${p.text} ${p.range ? `± ${p.range}` : ''}`));
+    else if (q.type === 'matching') q.content.pairs.forEach((p: any) => rows.push(`${p.left}: ${p.right}`));
+    else if (q.type === 'sequencing') q.content.items.forEach((it: string, i: number) => rows.push(`${i+1}. ${it}`));
+    return rows;
 }

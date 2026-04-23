@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Box, Typography, Stack, Fade, Paper, Grid } from '@mui/material';
+import { Box, Typography, Stack, Fade, Paper, Grid, Avatar } from '@mui/material';
+import { Trophy } from 'lucide-react';
+import { io } from 'socket.io-client';
+
+const socket = io();
 
 interface Slide {
-  type: 'event_title' | 'set_title' | 'question' | 'event_end';
+  type: 'event_title' | 'set_title' | 'question' | 'intermission' | 'event_end';
   title?: string;
   data?: any;
 }
 
-/**
- * Fisher-Yates Shuffle
- */
 function shuffle<T>(array: T[]): T[] {
   const newArray = [...array];
   for (let i = newArray.length - 1; i > 0; i--) {
@@ -22,47 +23,80 @@ function shuffle<T>(array: T[]): T[] {
 export default function SlideController({ event, onExit }: { event: any; onExit: () => void }) {
   const [slides, setSlides] = useState<Slide[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [scores, setScores] = useState<Record<string, boolean>>({});
 
   const buildSlides = useCallback(async () => {
     const slideList: Slide[] = [];
     slideList.push({ type: 'event_title', title: event.title });
+
     const setsRes = await fetch(`/api/events/${event.id}/sets`);
     const sets = await setsRes.json();
-    for (const set of sets) {
+
+    for (let i = 0; i < sets.length; i++) {
+      const set = sets[i];
       slideList.push({ type: 'set_title', title: set.name });
+
       const qRes = await fetch(`/api/sets/${set.id}/questions`);
       const questions = await qRes.json();
       for (const q of questions) {
         slideList.push({ type: 'question', data: q });
       }
+
+      // Add intermission after each set except possibly the very last if we want Event End instead
+      slideList.push({ type: 'intermission', title: `${set.name} Complete` });
     }
-    slideList.push({ type: 'event_end', title: 'End of Round' });
+
+    slideList.push({ type: 'event_end', title: 'Trivia Night Complete' });
     setSlides(slideList);
   }, [event]);
 
-  useEffect(() => { buildSlides(); }, [buildSlides]);
+  const fetchScores = useCallback(async () => {
+    const [tRes, aRes] = await Promise.all([
+      fetch(`/api/events/${event.id}/teams`),
+      fetch(`/api/events/${event.id}/answers`)
+    ]);
+    const teamData = await tRes.json();
+    const answerData = await aRes.json();
+    
+    const scoresMap: Record<string, boolean> = {};
+    answerData.forEach((a: any) => {
+      scoresMap[`${a.team_id}-${a.question_id}-${a.answer_index}`] = !!a.is_correct;
+    });
+    
+    setTeams(teamData);
+    setScores(scoresMap);
+  }, [event.id]);
 
-  const handleNext = useCallback(() => {
-    if (currentIndex < slides.length - 1) {
-      setCurrentIndex(prev => prev + 1);
-    } else if (currentIndex === slides.length - 1) {
-      onExit();
-    }
-  }, [currentIndex, slides.length, onExit]);
+  useEffect(() => { 
+    buildSlides();
+    fetchScores();
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === ' ') handleNext();
-      if (e.key === 'ArrowLeft' && currentIndex > 0) setCurrentIndex(prev => prev - 1);
-      if (e.key === 'Escape') onExit();
+    socket.emit('join_event', event.id);
+
+    socket.on('slide_changed', (index: number) => setCurrentIndex(index));
+    socket.on('leaderboard_toggled', (visible: boolean) => {
+        if (visible) fetchScores();
+        setShowLeaderboard(visible);
+    });
+
+    return () => {
+        socket.off('slide_changed');
+        socket.off('leaderboard_toggled');
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleNext, currentIndex, onExit]);
+  }, [buildSlides, fetchScores, event.id]);
 
   if (slides.length === 0) return null;
 
   const currentSlide = slides[currentIndex];
+
+  const calculateLeaderboard = () => {
+    return teams.map(team => {
+      const total = Object.keys(scores).filter(k => k.startsWith(`${team.id}-`) && scores[k]).length;
+      return { ...team, score: total };
+    }).sort((a, b) => b.score - a.score);
+  };
 
   const renderCenteredSlide = (title: string, subtitle: string, color: string) => (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
@@ -74,38 +108,39 @@ export default function SlideController({ event, onExit }: { event: any; onExit:
   );
 
   return (
-    <Box 
-      onClick={handleNext}
-      sx={{ 
-        height: '100vh', 
-        width: '100vw', 
-        bgcolor: '#000', 
-        color: '#fff', 
-        cursor: 'pointer',
-        userSelect: 'none',
-        overflow: 'hidden',
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        zIndex: 9999
-      }}
-    >
-      <Fade key={currentIndex} in timeout={500}>
-        <Box sx={{ width: '100%', height: '100%' }}>
-          {currentSlide.type === 'event_title' && renderCenteredSlide(currentSlide.title || '', 'Welcome to Trivia Night', '#90caf9')}
-          {currentSlide.type === 'set_title' && renderCenteredSlide(currentSlide.title || '', 'Starting Round', '#f48fb1')}
-          {currentSlide.type === 'event_end' && renderCenteredSlide(currentSlide.title || '', 'Click to finish', '#90caf9')}
-          {currentSlide.type === 'question' && <QuestionDisplay question={currentSlide.data} />}
-        </Box>
-      </Fade>
+    <Box sx={{ height: '100vh', width: '100vw', bgcolor: '#000', color: '#fff', overflow: 'hidden', position: 'fixed', top: 0, left: 0, zIndex: 9999 }}>
+      {showLeaderboard ? (
+        <Fade in timeout={500}>
+            <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 4 }}>
+                <Typography variant="h2" sx={{ mb: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <Trophy size={60} color="#fbc02d" /> Current Standings
+                </Typography>
+                <Paper sx={{ width: '100%', maxWidth: 900, bgcolor: 'rgba(255,255,255,0.05)', p: 2 }}>
+                    {calculateLeaderboard().map((t, i) => (
+                        <Box key={t.id} sx={{ p: 3, display: 'flex', alignItems: 'center', borderBottom: i < teams.length - 1 ? '1px solid #333' : 'none' }}>
+                            <Avatar sx={{ mr: 4, width: 60, height: 60, fontSize: '2rem', bgcolor: i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? '#cd7f32' : '#333', color: i < 3 ? '#000' : '#fff' }}>{i + 1}</Avatar>
+                            <Typography variant="h3" sx={{ flexGrow: 1, fontWeight: i === 0 ? 800 : 400 }}>{t.name}</Typography>
+                            <Typography variant="h2" sx={{ fontWeight: 900, color: '#90caf9' }}>{t.score} <Typography component="span" variant="h5">pts</Typography></Typography>
+                        </Box>
+                    ))}
+                </Paper>
+            </Box>
+        </Fade>
+      ) : (
+        <Fade key={currentIndex} in timeout={500}>
+            <Box sx={{ width: '100%', height: '100%' }}>
+            {currentSlide.type === 'event_title' && renderCenteredSlide(currentSlide.title || '', 'Welcome to Trivia Night', '#90caf9')}
+            {currentSlide.type === 'set_title' && renderCenteredSlide(currentSlide.title || '', 'Starting Round', '#f48fb1')}
+            {currentSlide.type === 'intermission' && renderCenteredSlide('Intermission', 'Scores are being tallied...', '#fff')}
+            {currentSlide.type === 'event_end' && renderCenteredSlide(currentSlide.title || '', 'Thanks for playing!', '#90caf9')}
+            {currentSlide.type === 'question' && <QuestionDisplay question={currentSlide.data} />}
+            </Box>
+        </Fade>
+      )}
+
+      {/* Progress Indicator */}
       <Box sx={{ position: 'absolute', bottom: 30, left: '20%', width: '60%', height: 6, bgcolor: 'rgba(255,255,255,0.1)', borderRadius: 3 }}>
-        <Box sx={{ 
-          width: `${((currentIndex + 1) / slides.length) * 100}%`, 
-          height: '100%', 
-          bgcolor: '#90caf9',
-          borderRadius: 3,
-          transition: 'width 0.3s ease'
-        }} />
+        <Box sx={{ width: `${((currentIndex + 1) / slides.length) * 100}%`, height: '100%', bgcolor: '#90caf9', borderRadius: 3, transition: 'width 0.3s ease' }} />
       </Box>
     </Box>
   );

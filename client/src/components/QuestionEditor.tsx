@@ -90,6 +90,16 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
     }
   }, [initialData, open]);
 
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('media', file);
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    setMediaUrl(data.url);
+  };
+
   const handleLocalSave = async () => {
     await onSave({
       id: initialData?.id,
