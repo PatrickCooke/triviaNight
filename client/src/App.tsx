@@ -20,24 +20,22 @@ import {
   Layers, 
   Settings, 
   MonitorPlay,
-  Database
+  Database,
+  BarChart3
 } from 'lucide-react';
 import EventsPage from './pages/EventsPage';
 import SetsPage from './pages/SetsPage';
 import AllQuestionsPage from './pages/AllQuestionsPage';
 import PresentationPage from './pages/PresentationPage';
+import AnalyticsPage from './pages/AnalyticsPage';
 
 const drawerWidth = 240;
 
 const darkTheme = createTheme({
   palette: {
     mode: 'dark',
-    primary: {
-      main: '#90caf9',
-    },
-    secondary: {
-      main: '#f48fb1',
-    },
+    primary: { main: '#90caf9' },
+    secondary: { main: '#f48fb1' },
   },
 });
 
@@ -59,9 +57,7 @@ export default function App() {
         <CssBaseline />
         <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
           <Toolbar>
-            <Typography variant="h6" noWrap component="div">
-              TriviaNight Management
-            </Typography>
+            <Typography variant="h6" noWrap component="div">TriviaNight Management</Typography>
           </Toolbar>
         </AppBar>
         <Drawer
@@ -90,7 +86,13 @@ export default function App() {
               <ListItem disablePadding>
                 <ListItemButton selected={activeTab === 'all-questions'} onClick={() => setActiveTab('all-questions')}>
                   <ListItemIcon><Database /></ListItemIcon>
-                  <ListItemText primary="All Questions" />
+                  <ListItemText primary="Question Bank" />
+                </ListItemButton>
+              </ListItem>
+              <ListItem disablePadding>
+                <ListItemButton selected={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')}>
+                  <ListItemIcon><BarChart3 /></ListItemIcon>
+                  <ListItemText primary="Analytics" />
                 </ListItemButton>
               </ListItem>
             </List>
@@ -116,6 +118,7 @@ export default function App() {
           {activeTab === 'events' && <EventsPage />}
           {activeTab === 'sets' && <SetsPage />}
           {activeTab === 'all-questions' && <AllQuestionsPage />}
+          {activeTab === 'analytics' && <AnalyticsPage />}
         </Box>
       </Box>
     </ThemeProvider>
