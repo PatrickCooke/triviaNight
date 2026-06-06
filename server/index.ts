@@ -16,10 +16,11 @@ const io = new Server(httpServer, {
     cors: { origin: '*' }
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3000;
 
 const UPLOADS_DIR = join(process.cwd(), 'public/uploads');
 if (!existsSync(UPLOADS_DIR)) mkdirSync(UPLOADS_DIR, { recursive: true });
+
 
 app.use(cors());
 app.use(express.json());
@@ -215,4 +216,13 @@ app.post('/api/answers', (req: any, res: any) => {
     res.json({ message: 'ok' });
 });
 
-httpServer.listen(PORT, () => console.log(`>>> [READY] http://localhost:${PORT}`));
+// 3. The Production Production Frontend Handlers (Add this at the bottom)
+// This serves the static files (js, css, images) from Vite
+app.use(express.static(join(process.cwd(), 'client/dist')));
+
+// This acts as the safety net for React Router (SPA catch-all)
+app.get('*', (req, res) => {
+    res.sendFile(join(process.cwd(), 'client/dist/index.html'));
+});
+
+httpServer.listen(PORT, '0.0.0.0', () => console.log(`>>> [READY] http://localhost:${PORT}`));

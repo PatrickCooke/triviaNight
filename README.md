@@ -80,4 +80,11 @@ In the **Events** and **Sets** tables, you will see the following icons:
 
 For the best experience, host the project on a Pi and use a **Cloudflare Tunnel** to access the remote control from your phone via the internet without needing to expose ports on your router. 
 
+### Updating Code
+- Make changes locally, and test to confirm it works
+- push code to github
+- SSH into raspberry pi
+- pull latest from github
+- run `NODE_OPTIONS="--max-old-space-size=512" VITE_MAX_WORKERS=1 docker compose up -d --build` to have docker rebuild app with latest
+
 Refer to `docs/hosting_raspberry_pi.md` for a step-by-step guide.

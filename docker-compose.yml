@@ -1,0 +1,14 @@
+services:
+  trivia-night:
+    build: .
+    container_name: trivia_night_app
+    restart: always
+    ports:
+      - "8001:3000"
+
+  cloudflare-tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflare_tunnel
+    restart: always
+    command: tunnel --no-autoupdate run --token eyJhIjoiMjY1MGVlOWE4OTAzYjEwYjBmN2JkNzFjNjEzYWVlMjYiLCJ0IjoiNThhMmMyMmItOWFiYy00NDdlLTllZjMtZjQzYWY2OTZlOWRmIiwicyI6Ik1XWXhOVFpoWldRdE5HSXdPQzAwWTJWa0xUaGhNV1l0Wm1JMFpqUmhNVGczT0dJMyJ9
+    
