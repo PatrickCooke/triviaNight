@@ -15,10 +15,16 @@ import {
   Checkbox,
   Divider,
   Switch,
-  FormControlLabel
+  FormControlLabel,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
-import { X, ChevronLeft, ChevronRight, Trophy, CheckSquare, Eye, EyeOff } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Trophy, CheckSquare, Eye, EyeOff, QrCode } from 'lucide-react';
 import { io } from 'socket.io-client';
+import { QRCodeCanvas } from 'qrcode.react';
 
 const socket = io();
 
@@ -98,6 +104,12 @@ export default function LiveScorer({ event, teams, sets, onExit }: Props) {
     });
   };
 
+  const [qrOpen, setQrOpen] = useState(false);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+  const playUrl = `${window.location.origin}/?play=${event.id}`;
+
   if (slides.length === 0) return <Box sx={{ p: 4 }}>Initializing Remote Control...</Box>;
 
   const currentSlide = slides[currentIndex];
@@ -105,16 +117,42 @@ export default function LiveScorer({ event, teams, sets, onExit }: Props) {
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
       {/* Top Header */}
-      <Paper sx={{ p: 2, mb: 2, borderRadius: 0, borderBottom: '1px solid #333' }}>
+      <Paper sx={{ p: { xs: 1, sm: 2 }, mb: { xs: 1, sm: 2 }, borderRadius: 0, borderBottom: '1px solid #333' }}>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
-          <Box>
-            <Typography variant="caption" color="primary" sx={{ textTransform: 'uppercase', fontWeight: 'bold' }}>Remote Control</Typography>
-            <Typography variant="h5">{event.title}</Typography>
+          <Box sx={{ maxWidth: '40%' }}>
+            <Typography variant="caption" color="primary" sx={{ textTransform: 'uppercase', fontWeight: 'bold', display: { xs: 'none', sm: 'block' } }}>Remote Control</Typography>
+            <Typography variant={isMobile ? "subtitle1" : "h5"} noWrap>{event.title}</Typography>
           </Box>
-          <Stack direction="row" spacing={2} alignItems="center">
+          <Stack direction="row" spacing={{ xs: 0, sm: 1 }} alignItems="center">
+            <IconButton onClick={() => setQrOpen(true)} color="primary">
+              <QrCode />
+            </IconButton>
+            
+            <Dialog 
+                open={qrOpen} 
+                onClose={() => setQrOpen(false)}
+                fullScreen={isMobile}
+                maxWidth="md"
+            >
+                <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    Join Trivia Night
+                    <IconButton onClick={() => setQrOpen(false)}><X /></IconButton>
+                </DialogTitle>
+                <DialogContent sx={{ textAlign: 'center', py: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                    <Typography variant="h6" gutterBottom color="text.secondary">Scan to Play</Typography>
+                    <Box sx={{ p: 2, bgcolor: '#fff', borderRadius: 4, display: 'inline-block', boxShadow: 3 }}>
+                        <QRCodeCanvas value={playUrl} size={isMobile ? 280 : 400} />
+                    </Box>
+                    <Typography variant="body2" sx={{ mt: 3, opacity: 0.7, maxWidth: 300, wordBreak: 'break-all' }}>
+                        {playUrl}
+                    </Typography>
+                </DialogContent>
+            </Dialog>
+
             <FormControlLabel
-                control={<Switch checked={audienceLeaderboard} onChange={(e) => toggleAudienceLeaderboard(e.target.checked)} color="secondary" />}
-                label={audienceLeaderboard ? "Leaderboard Public" : "Push Leaderboard"}
+                control={<Switch checked={audienceLeaderboard} onChange={(e) => toggleAudienceLeaderboard(e.target.checked)} color="secondary" size={isMobile ? "small" : "medium"} />}
+                label={isMobile ? "" : "Push Leaderboard"}
+                sx={{ ml: { xs: 0, sm: 1 } }}
             />
             <IconButton onClick={onExit}><X /></IconButton>
           </Stack>
