@@ -20,7 +20,7 @@ A professional, local-first trivia management and presentation system designed t
    # From the root directory
    npm run dev
    ```
-   This will start both the Express backend (Port 3001) and the Vite frontend (Port 5173).
+   This will start both the Express backend (Port 3000) and the Vite frontend (Port 5173).
 
 ---
 

@@ -43,4 +43,4 @@ This guide explains how to host the **triviaNight** application on a Raspberry P
 
 ## 4. Local Network Access
 - Find your Pi's IP: `hostname -I`
-- Access from other devices on the same Wi-Fi/Ethernet: `http://<pi-ip-address>:3001` (or your configured port).
+- Access from other devices on the same Wi-Fi/Ethernet: `http://<pi-ip-address>:3000` (or your configured port).

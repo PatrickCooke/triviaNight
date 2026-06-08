@@ -18,7 +18,7 @@ const io = new Server(httpServer, {
     cors: { origin: '*' }
 });
 
-const PORT = 3001;
+const PORT = 3000;
 
 const UPLOADS_DIR = join(process.cwd(), 'public/uploads');
 if (!existsSync(UPLOADS_DIR)) mkdirSync(UPLOADS_DIR, { recursive: true });
