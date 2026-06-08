@@ -22,7 +22,7 @@ function shuffle<T>(array: T[]): T[] {
 
 export default function SlideController({ event, onExit }: { event: any; onExit: () => void }) {
   const [slides, setSlides] = useState<Slide[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(event.current_slide_index || 0);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [teams, setTeams] = useState<any[]>([]);
   const [scores, setScores] = useState<Record<string, boolean>>({});

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Box, Typography, Stack, Fade, Paper, Grid, CircularProgress, Container } from '@mui/material';
+import { Box, Typography, Stack, Fade, Paper, Grid, CircularProgress, Container, Button } from '@mui/material';
 import { Trophy, Users } from 'lucide-react';
 import { io } from 'socket.io-client';
 
@@ -21,6 +21,7 @@ function shuffle<T>(array: T[]): T[] {
 }
 
 export default function ParticipantView({ eventId }: { eventId: number }) {
+  console.log('>>> [PARTICIPANT] Rendering for eventId:', eventId);
   const [event, setEvent] = useState<any>(null);
   const [slides, setSlides] = useState<Slide[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -55,6 +56,7 @@ export default function ParticipantView({ eventId }: { eventId: number }) {
 
       slideList.push({ type: 'event_end', title: 'Trivia Night Complete' });
       setSlides(slideList);
+      setCurrentIndex(currentEvent.current_slide_index || 0);
       setLoading(false);
     } catch (err) {
       console.error('Error fetching participant data:', err);
@@ -164,10 +166,22 @@ export default function ParticipantView({ eventId }: { eventId: number }) {
       </Box>
       
       {/* Footer Info */}
-      <Box sx={{ p: 1.5, textAlign: 'center', borderTop: '1px solid #222', bgcolor: '#050505', flexShrink: 0 }}>
+      <Box sx={{ p: 1.5, textAlign: 'center', borderTop: '1px solid #222', bgcolor: '#050505', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
         <Typography variant="caption" sx={{ opacity: 0.5 }}>
           {event?.title} • Slide {currentIndex + 1} of {slides.length}
         </Typography>
+        <Button 
+            size="small" 
+            color="inherit" 
+            variant="outlined" 
+            sx={{ fontSize: '0.6rem', py: 0, opacity: 0.5 }}
+            onClick={() => {
+                localStorage.removeItem('activeEventId');
+                window.location.reload();
+            }}
+        >
+            Leave
+        </Button>
       </Box>
     </Box>
   );

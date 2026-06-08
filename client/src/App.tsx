@@ -15,7 +15,10 @@ import {
   ThemeProvider,
   createTheme,
   IconButton,
-  useMediaQuery
+  useMediaQuery,
+  Stack,
+  Paper,
+  Button
 } from '@mui/material';
 import { 
   CalendarDays, 
@@ -49,15 +52,66 @@ export default function App() {
   const [playEventId, setPlayEventId] = useState<number | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   
+  // New States
+  const [gameCode, setGameCode] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+
   const isMobile = useMediaQuery(darkTheme.breakpoints.down('sm'));
 
   useEffect(() => {
+    // 1. Check for ?play parameter (direct link/QR)
     const params = new URLSearchParams(window.location.search);
     const playId = params.get('play');
     if (playId) {
       setPlayEventId(parseInt(playId, 10));
+      return;
+    }
+
+    // 2. Check LocalStorage for participant session
+    const savedEventId = localStorage.getItem('activeEventId');
+    if (savedEventId) {
+        setPlayEventId(parseInt(savedEventId, 10));
+    }
+
+    // 3. Check SessionStorage for Admin session (Reset on close, persist on reload)
+    if (sessionStorage.getItem('admin_session') === 'true') {
+        setIsAdmin(true);
     }
   }, []);
+
+  const handleJoinGame = async () => {
+    if (gameCode.length !== 6) return;
+    try {
+        const res = await fetch(`/api/events/verify/${gameCode.toUpperCase()}`);
+        if (res.ok) {
+            const event = await res.json();
+            localStorage.setItem('activeEventId', event.id);
+            setPlayEventId(event.id);
+        } else {
+            alert('That game is not available');
+        }
+    } catch (err) {
+        alert('Connection error. Please try again.');
+    }
+  };
+
+  const handleAdminLogin = () => {
+    if (adminPassword === 'trivia123') {
+        sessionStorage.setItem('admin_session', 'true');
+        setIsAdmin(true);
+        setShowAdminLogin(false);
+    } else {
+        alert('Invalid password');
+    }
+  };
+
+  const handleAdminLogout = () => {
+    sessionStorage.removeItem('admin_session');
+    setIsAdmin(false);
+    setActiveTab('events');
+  };
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -68,6 +122,7 @@ export default function App() {
     if (isMobile) setMobileOpen(false);
   };
 
+  // --- PARTICIPANT VIEW ---
   if (playEventId) {
     return (
       <ThemeProvider theme={darkTheme}>
@@ -77,6 +132,88 @@ export default function App() {
     );
   }
 
+  // --- WELCOME SCREEN (NO SESSION) ---
+  if (!isAdmin && !isPresenting) {
+    return (
+        <ThemeProvider theme={darkTheme}>
+            <CssBaseline />
+            <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+                <AppBar position="static" sx={{ bgcolor: '#000', borderBottom: '1px solid #222' }} elevation={0}>
+                    <Toolbar />
+                </AppBar>
+                <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 3 }}>
+                    <Stack spacing={4} alignItems="center" sx={{ width: '100%', maxWidth: 400, textAlign: 'center' }}>
+                        <Typography variant="h3" sx={{ fontWeight: 800, color: '#90caf9' }}>TriviaNight</Typography>
+                        
+                        {!showAdminLogin ? (
+                            <Paper sx={{ p: 4, width: '100%', bgcolor: 'rgba(255,255,255,0.03)', borderRadius: 4 }}>
+                                <Typography variant="h6" gutterBottom>Join a Game</Typography>
+                                <Stack spacing={3}>
+                                    <Box>
+                                        <Typography variant="caption" sx={{ display: 'block', mb: 1, opacity: 0.7, textTransform: 'uppercase' }}>Game Code</Typography>
+                                        <input 
+                                            value={gameCode}
+                                            onChange={(e) => setGameCode(e.target.value.toUpperCase().slice(0, 6))}
+                                            placeholder="E.G. AB1234"
+                                            style={{
+                                                width: '100%',
+                                                background: '#1a1a1a',
+                                                border: '2px solid #333',
+                                                color: '#fff',
+                                                fontSize: '2rem',
+                                                textAlign: 'center',
+                                                padding: '12px',
+                                                borderRadius: '8px',
+                                                textTransform: 'uppercase',
+                                                fontWeight: 'bold'
+                                            }}
+                                        />
+                                    </Box>
+                                    <Button 
+                                        variant="contained" 
+                                        size="large" 
+                                        fullWidth 
+                                        disabled={gameCode.length !== 6}
+                                        onClick={handleJoinGame}
+                                        sx={{ py: 2, fontSize: '1.2rem', fontWeight: 'bold' }}
+                                    >
+                                        Join Round
+                                    </Button>
+                                    <Button variant="text" size="small" sx={{ opacity: 0.3 }} onClick={() => setShowAdminLogin(true)}>Admin Management</Button>
+                                </Stack>
+                            </Paper>
+                        ) : (
+                            <Paper sx={{ p: 4, width: '100%', bgcolor: 'rgba(255,255,255,0.03)', borderRadius: 4 }}>
+                                <Typography variant="h6" gutterBottom>Admin Entry</Typography>
+                                <Stack spacing={3}>
+                                    <input 
+                                        type="password"
+                                        value={adminPassword}
+                                        onChange={(e) => setAdminPassword(e.target.value)}
+                                        placeholder="Password"
+                                        style={{
+                                            width: '100%',
+                                            background: '#1a1a1a',
+                                            border: '2px solid #333',
+                                            color: '#fff',
+                                            fontSize: '1.2rem',
+                                            padding: '12px',
+                                            borderRadius: '8px'
+                                        }}
+                                    />
+                                    <Button variant="contained" fullWidth onClick={handleAdminLogin}>Unlock Dashboard</Button>
+                                    <Button variant="text" onClick={() => setShowAdminLogin(false)}>Back to Join</Button>
+                                </Stack>
+                            </Paper>
+                        )}
+                    </Stack>
+                </Box>
+            </Box>
+        </ThemeProvider>
+    );
+  }
+
+  // --- PRESENTATION VIEW ---
   if (isPresenting) {
     return (
       <ThemeProvider theme={darkTheme}>
@@ -84,6 +221,8 @@ export default function App() {
       </ThemeProvider>
     );
   }
+
+  // --- ADMIN DASHBOARD ---
 
   const drawerContent = (
     <Box>
@@ -124,9 +263,9 @@ export default function App() {
             </ListItemButton>
           </ListItem>
           <ListItem disablePadding>
-            <ListItemButton>
+            <ListItemButton onClick={handleAdminLogout}>
               <ListItemIcon><Settings /></ListItemIcon>
-              <ListItemText primary="Settings" />
+              <ListItemText primary="Logout Admin" />
             </ListItemButton>
           </ListItem>
         </List>

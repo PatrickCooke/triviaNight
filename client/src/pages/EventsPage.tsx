@@ -51,12 +51,20 @@ export default function EventsPage() {
   const [formData, setFormData] = useState({ title: '', date: '', location: '' });
 
   const fetchData = async () => {
-    const [evRes, setRes] = await Promise.all([
-      fetch('/api/events'),
-      fetch('/api/sets')
-    ]);
-    setEvents(await evRes.json());
-    setSets(await setRes.json());
+    console.log('>>> [EVENTS] Fetching data...');
+    try {
+      const [evRes, setRes] = await Promise.all([
+        fetch('/api/events'),
+        fetch('/api/sets')
+      ]);
+      const evData = await evRes.json();
+      const setData = await setRes.json();
+      console.log('>>> [EVENTS] Received:', evData.length, 'events');
+      setEvents(evData);
+      setSets(setData);
+    } catch (err) {
+      console.error('>>> [EVENTS] Fetch error:', err);
+    }
   };
 
   useEffect(() => {

@@ -36,9 +36,15 @@ export default function SetsPage() {
   const [viewingQuestions, setViewingQuestions] = useState<{ id: number; name: string } | null>(null);
 
   const fetchSets = async () => {
-    const res = await fetch('/api/sets');
-    const data = await res.json();
-    setSets(data);
+    console.log('>>> [SETS] Fetching sets...');
+    try {
+      const res = await fetch('/api/sets');
+      const data = await res.json();
+      console.log('>>> [SETS] Received:', data.length, 'sets');
+      setSets(data);
+    } catch (err) {
+      console.error('>>> [SETS] Fetch error:', err);
+    }
   };
 
   useEffect(() => {

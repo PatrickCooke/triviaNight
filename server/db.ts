@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 const Database = require('better-sqlite3');
 
 const DB_PATH = join(process.cwd(), 'trivia.db');
+console.log('>>> [DB] Using database at:', DB_PATH);
 const SCHEMA_PATH = join(process.cwd(), 'server/db.sql');
 
 let db: any = null;

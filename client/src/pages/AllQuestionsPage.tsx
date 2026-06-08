@@ -51,21 +51,29 @@ export default function AllQuestionsPage() {
   }, []);
 
   const handleBulkImport = async () => {
-    try {
-      const parsed = JSON.parse(bulkData);
-      await fetch('/api/questions/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ questions: parsed }),
-      });
-      setBulkOpen(false);
-      setBulkData('');
-      fetchAllQuestions();
-    } catch (e) {
-      alert('Invalid JSON format');
-    }
-  };
+   try {
+     const parsed = JSON.parse(bulkData);
+     const res = await fetch('/api/questions/bulk', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({ questions: parsed }),
+     });
 
+     if (!res.ok) {
+       const errData = await res.json();
+       throw new Error(errData.error || 'Server error during import');
+     }
+
+     const result = await res.json();
+     alert(`Success: ${result.message}`);
+     setBulkOpen(false);
+     setBulkData('');
+     fetchAllQuestions();
+   } catch (e: any) {
+     console.error('Import failed:', e);
+     alert(`Import failed: ${e.message}`);
+   }
+  };
   const handleSaveQuestion = async (qData: any) => {
     const url = qData.id ? `/api/questions/${qData.id}` : '/api/questions';
     const method = qData.id ? 'PUT' : 'POST';
@@ -167,13 +175,36 @@ export default function AllQuestionsPage() {
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 2 }}>
             Paste a JSON array of questions. Format:
-            <pre style={{ background: '#333', padding: 8, borderRadius: 4 }}>
+            <pre style={{ background: '#333', padding: 8, borderRadius: 4, fontSize: '0.8rem', overflowX: 'auto' }}>
 {`[
   {
     "type": "multiple_choice",
     "category": "Science",
     "prompt": "What is 2+2?",
     "content": { "correct": "4", "distractors": ["1", "2", "3"] }
+  },
+  {
+    "type": "multi_part",
+    "category": "Art",
+    "prompt": "Name the primary colors.",
+    "content": { "answers": ["Red", "Blue", "Yellow"] }
+  },
+  {
+    "type": "matching",
+    "category": "Geography",
+    "prompt": "Match country to capital.",
+    "content": { 
+      "pairs": [
+        {"left": "France", "right": "Paris"},
+        {"left": "Japan", "right": "Tokyo"}
+      ] 
+    }
+  },
+  {
+    "type": "sequencing",
+    "category": "Nature",
+    "prompt": "Order by size (small to large).",
+    "content": { "items": ["Mouse", "Dog", "Elephant"] }
   }
 ]`}
             </pre>
@@ -182,7 +213,7 @@ export default function AllQuestionsPage() {
             fullWidth
             multiline
             rows={10}
-            placeholder='[{"type": "multiple_choice", ...}]'
+            placeholder='[{"type": "multiple_choice", ...}, {"type": "multi_part", ...}]'
             value={bulkData}
             onChange={(e) => setBulkData(e.target.value)}
           />

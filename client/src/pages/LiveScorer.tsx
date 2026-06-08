@@ -43,7 +43,7 @@ interface Props {
 
 export default function LiveScorer({ event, teams, sets, onExit }: Props) {
   const [slides, setSlides] = useState<Slide[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(event.current_slide_index || 0);
   const [scores, setScores] = useState<Record<string, boolean>>({});
   const [audienceLeaderboard, setAudienceLeaderboard] = useState(false);
 
@@ -122,6 +122,11 @@ export default function LiveScorer({ event, teams, sets, onExit }: Props) {
           <Box sx={{ maxWidth: '40%' }}>
             <Typography variant="caption" color="primary" sx={{ textTransform: 'uppercase', fontWeight: 'bold', display: { xs: 'none', sm: 'block' } }}>Remote Control</Typography>
             <Typography variant={isMobile ? "subtitle1" : "h5"} noWrap>{event.title}</Typography>
+            {event.game_code && (
+                <Typography variant="caption" sx={{ bgcolor: 'rgba(144, 202, 249, 0.1)', color: '#90caf9', px: 1, borderRadius: 1, fontWeight: 'bold', border: '1px solid rgba(144, 202, 249, 0.3)' }}>
+                    CODE: {event.game_code}
+                </Typography>
+            )}
           </Box>
           <Stack direction="row" spacing={{ xs: 0, sm: 1 }} alignItems="center">
             <IconButton onClick={() => setQrOpen(true)} color="primary">
