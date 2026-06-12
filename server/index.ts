@@ -5,6 +5,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { getDb, initDb } from './db.js';
+import { generateScoreSheet, generateMasterPrintout } from './pdf_generator.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -266,6 +267,67 @@ app.get('/api/analytics/teams', (req: any, res: any) => {
         `).all();
         res.json(rows);
     } catch (e) { res.status(500).json([]); }
+});
+
+app.get('/api/events/:id/scoresheet', async (req: any, res: any) => {
+    try {
+        const db = getDb();
+        const event = db.prepare('SELECT title FROM events WHERE id = ?').get(req.params.id);
+        if (!event) return res.status(404).json({ error: 'Event not found' });
+
+        const sets = db.prepare('SELECT s.* FROM sets s JOIN event_sets es ON s.id = es.set_id WHERE es.event_id = ?').all(req.params.id);
+        const rounds = [];
+
+        for (const set of sets) {
+            const questions = db.prepare('SELECT q.* FROM questions q JOIN question_sets qs ON q.id = qs.question_id WHERE qs.set_id = ?').all(set.id);
+            rounds.push({
+                title: set.name,
+                questions: questions.map((q: any) => ({
+                    ...q,
+                    content: typeof q.content === 'string' ? JSON.parse(q.content) : q.content
+                }))
+            });
+        }
+
+        const pdfBuffer = await generateScoreSheet(rounds, req.query.seed as string);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=scoresheet_${req.params.id}.pdf`);
+        res.send(pdfBuffer);
+    } catch (e) {
+        console.error('>>> [API] Score Sheet Error:', e);
+        res.status(500).json({ error: 'Failed to generate score sheet' });
+    }
+});
+
+app.get('/api/events/:id/printout', async (req: any, res: any) => {
+    try {
+        const db = getDb();
+        const mode = (req.query.mode as string) || 'questions';
+        const event = db.prepare('SELECT title FROM events WHERE id = ?').get(req.params.id);
+        if (!event) return res.status(404).json({ error: 'Event not found' });
+
+        const sets = db.prepare('SELECT s.* FROM sets s JOIN event_sets es ON s.id = es.set_id WHERE es.event_id = ?').all(req.params.id);
+        const rounds = [];
+
+        for (const set of sets) {
+            const questions = db.prepare('SELECT q.* FROM questions q JOIN question_sets qs ON q.id = qs.question_id WHERE qs.set_id = ?').all(set.id);
+            rounds.push({
+                title: set.name,
+                questions: questions.map((q: any) => ({
+                    ...q,
+                    content: typeof q.content === 'string' ? JSON.parse(q.content) : q.content
+                }))
+            });
+        }
+
+        const pdfBuffer = await generateMasterPrintout(rounds, mode as any);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=master_${mode}_${req.params.id}.pdf`);
+        res.send(pdfBuffer);
+    } catch (e) {
+        console.error('>>> [API] Printout Error:', e);
+        res.status(500).json({ error: 'Failed to generate master printout' });
+    }
 });
 
 // Mappings

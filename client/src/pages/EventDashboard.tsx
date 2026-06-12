@@ -14,9 +14,17 @@ import {
   Grid,
   Card,
   CardContent,
-  Chip
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  FormControl,
+  RadioGroup,
+  FormControlLabel,
+  Radio
 } from '@mui/material';
-import { ArrowLeft, Plus, Trash2, Trophy, PlayCircle } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Trophy, PlayCircle, Printer } from 'lucide-react';
 import LiveScorer from './LiveScorer';
 
 interface Team {
@@ -40,6 +48,8 @@ export default function EventDashboard({ event, onBack }: Props) {
   const [sets, setSets] = useState<Set[]>([]);
   const [newTeamName, setNewTeamName] = useState('');
   const [isScoring, setIsScoring] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
+  const [printMode, setPrintMode] = useState('questions');
 
   const fetchData = async () => {
     const [tRes, sRes] = await Promise.all([
@@ -70,6 +80,15 @@ export default function EventDashboard({ event, onBack }: Props) {
     fetchData();
   };
 
+  const handlePrint = () => {
+    if (printMode === 'scoresheets') {
+      window.open(`/api/events/${event.id}/scoresheet`, '_blank');
+    } else {
+      window.open(`/api/events/${event.id}/printout?mode=${printMode}`, '_blank');
+    }
+    setPrintOpen(false);
+  };
+
   if (isScoring) {
     return <LiveScorer event={event} teams={teams} sets={sets} onExit={() => setIsScoring(false)} />;
   }
@@ -83,16 +102,26 @@ export default function EventDashboard({ event, onBack }: Props) {
           <Typography color="text.secondary">{new Date(event.date).toLocaleDateString()} | {event.location}</Typography>
         </Box>
         <Box sx={{ flexGrow: 1 }} />
-        <Button 
-          variant="contained" 
-          color="success" 
-          size="large" 
-          startIcon={<PlayCircle />}
-          disabled={teams.length === 0 || sets.length === 0}
-          onClick={() => setIsScoring(true)}
-        >
-          Start Live Scoring
-        </Button>
+        <Stack direction="row" spacing={2}>
+          <Button 
+            variant="outlined" 
+            startIcon={<Printer />}
+            disabled={sets.length === 0}
+            onClick={() => setPrintOpen(true)}
+          >
+            Print
+          </Button>
+          <Button 
+            variant="contained" 
+            color="success" 
+            size="large" 
+            startIcon={<PlayCircle />}
+            disabled={teams.length === 0 || sets.length === 0}
+            onClick={() => setIsScoring(true)}
+          >
+            Start Live Scoring
+          </Button>
+        </Stack>
       </Stack>
 
       <Grid container spacing={4}>
@@ -163,6 +192,31 @@ export default function EventDashboard({ event, onBack }: Props) {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Print Options Dialog */}
+      <Dialog open={printOpen} onClose={() => setPrintOpen(false)}>
+        <DialogTitle>Print Options</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2 }} color="text.secondary">
+            Choose the type of document you want to generate.
+          </Typography>
+          <FormControl component="fieldset">
+            <RadioGroup value={printMode} onChange={(e) => setPrintMode(e.target.value)}>
+              <FormControlLabel value="questions" control={<Radio />} label="Questions Only" />
+              <FormControlLabel value="answers" control={<Radio />} label="Questions + Correct Answers" />
+              <FormControlLabel value="full" control={<Radio />} label="Full Take-Home (Include Distractors)" />
+              <Divider sx={{ my: 1 }} />
+              <FormControlLabel value="scoresheets" control={<Radio />} label="Participant Score Sheets (Half-Page)" />
+            </RadioGroup>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPrintOpen(false)}>Cancel</Button>
+          <Button onClick={handlePrint} variant="contained" startIcon={<Printer />}>
+            Generate PDF
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

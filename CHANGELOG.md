@@ -2,10 +2,14 @@
 
 All notable changes to the **triviaNight** project will be documented in this file.
 
-## [2026-04-11] - Infrastructure Fixes & ESM Migration
+## [2026-04-11] - Question Refinements & Phase 3 Start
 
-### Fixed
-- **ESM Configuration:** Migrated the root project to ES Modules (`type: module`) to satisfy Node.js 20+ requirements.
-- **Path Resolution:** Updated `server/db.ts` to correctly resolve the database schema from the `server/` directory.
-- **Dependency Management:** Fixed missing `client/package.json` and added necessary scripts to the root.
-- **Concurrent Execution:** Configured `npm run dev` to use the correct ESM loader for TypeScript.
+### Added
+- **Sequencing Question Type:** Created a dedicated type for ordering items with a custom shuffle layout.
+- **Granular Multi-Part Answers:** Refactored Multi-Part questions to support individual rows with types (Text/Number) and numerical range tolerance (±).
+- **Sequencing Editor:** Added Up/Down arrangement and item deletion.
+- **Phase 3 Initialization:** Started work on Teams and Live Scoring.
+
+### Planned
+- **Remote Control Pattern:** Architectural decision to use WebSockets (Socket.io) for real-time synchronization between "Audience" and "Scorekeeper" devices.
+- **Multi-Session Support:** Use "Rooms" to allow one Raspberry Pi to host multiple simultaneous trivia events.
