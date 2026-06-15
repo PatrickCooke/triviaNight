@@ -365,8 +365,17 @@ app.delete('/api/sets/:id/questions/:qId', (req: any, res: any) => {
 });
 app.get('/api/events/:id/teams', (req: any, res: any) => res.json(getDb().prepare('SELECT * FROM teams WHERE event_id = ?').all(req.params.id)));
 app.post('/api/events/:id/teams', (req: any, res: any) => {
-    const info = getDb().prepare('INSERT INTO teams (event_id, name) VALUES (?, ?)').run(req.params.id, req.body.name);
-    res.status(201).json({ id: info.lastInsertRowid });
+    const { name } = req.body;
+    const eventId = req.params.id;
+    console.log(`>>> [API] POST /api/events/${eventId}/teams - Adding team: "${name}"`);
+    try {
+        const info = getDb().prepare('INSERT INTO teams (event_id, name) VALUES (?, ?)').run(eventId, name);
+        console.log(`>>> [API] Team added with ID: ${info.lastInsertRowid}`);
+        res.status(201).json({ id: info.lastInsertRowid });
+    } catch (e) {
+        console.error('>>> [API] Team Add Error:', e);
+        res.status(500).json({ error: 'Failed to add team' });
+    }
 });
 app.delete('/api/teams/:id', (req: any, res: any) => {
     getDb().prepare('DELETE FROM teams WHERE id = ?').run(req.params.id);
@@ -383,6 +392,30 @@ app.post('/api/answers', (req: any, res: any) => {
     if (existing) db.prepare('UPDATE answers SET is_correct = ? WHERE id = ?').run(is_correct ? 1 : 0, existing.id);
     else db.prepare('INSERT INTO answers (team_id, question_id, answer_index, is_correct) VALUES (?, ?, ?, ?)').run(team_id, question_id, answer_index || 0, is_correct ? 1 : 0);
     res.json({ message: 'ok' });
+});
+
+app.get('/api/events/:id/multipliers', (req: any, res: any) => {
+    try {
+        const rows = getDb().prepare('SELECT * FROM team_round_multipliers trm JOIN teams t ON trm.team_id = t.id WHERE t.event_id = ?').all(req.params.id);
+        res.json(rows);
+    } catch (e) { res.status(500).json([]); }
+});
+
+app.post('/api/multipliers', (req: any, res: any) => {
+    const { team_id, set_id, multiplier } = req.body;
+    try {
+        const db = getDb();
+        const existing = db.prepare('SELECT 1 FROM team_round_multipliers WHERE team_id = ? AND set_id = ?').get(team_id, set_id);
+        if (existing) {
+            db.prepare('UPDATE team_round_multipliers SET multiplier = ? WHERE team_id = ? AND set_id = ?').run(multiplier, team_id, set_id);
+        } else {
+            db.prepare('INSERT INTO team_round_multipliers (team_id, set_id, multiplier) VALUES (?, ?, ?)').run(team_id, set_id, multiplier);
+        }
+        res.json({ message: 'ok' });
+    } catch (e) {
+        console.error('>>> [API] Multiplier Error:', e);
+        res.status(500).json({ error: 'Failed to update multiplier' });
+    }
 });
 
 // Static Production Serving (MOVE TO END)

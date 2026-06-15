@@ -52,12 +52,16 @@ export default function EventDashboard({ event, onBack }: Props) {
   const [printMode, setPrintMode] = useState('questions');
 
   const fetchData = async () => {
-    const [tRes, sRes] = await Promise.all([
-      fetch(`/api/events/${event.id}/teams`),
-      fetch(`/api/events/${event.id}/sets`)
-    ]);
-    setTeams(await tRes.json());
-    setSets(await sRes.json());
+    try {
+      const [tRes, sRes] = await Promise.all([
+        fetch(`/api/events/${event.id}/teams`),
+        fetch(`/api/events/${event.id}/sets`)
+      ]);
+      setTeams(await tRes.json());
+      setSets(await sRes.json());
+    } catch (err) {
+      console.error('>>> [DASHBOARD] Fetch Error:', err);
+    }
   };
 
   useEffect(() => {
@@ -145,7 +149,14 @@ export default function EventDashboard({ event, onBack }: Props) {
                   onChange={(e) => setNewTeamName(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleAddTeam()}
                 />
-                <Button variant="outlined" startIcon={<Plus />} onClick={handleAddTeam}>Add</Button>
+                <Button 
+                  variant="outlined" 
+                  startIcon={<Plus />} 
+                  onClick={handleAddTeam}
+                  disabled={!newTeamName.trim()}
+                >
+                  Add
+                </Button>
               </Stack>
 
               <List sx={{ bgcolor: 'background.paper', borderRadius: 1 }}>

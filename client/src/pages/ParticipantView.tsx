@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Box, Typography, Stack, Fade, Paper, Grid, CircularProgress, Container, Button } from '@mui/material';
+import { Box, Typography, Stack, Fade, Paper, Grid, CircularProgress, Container, Button, useMediaQuery, useTheme } from '@mui/material';
 import { Trophy, Users } from 'lucide-react';
 import { io } from 'socket.io-client';
 
@@ -22,12 +22,17 @@ function shuffle<T>(array: T[]): T[] {
 
 export default function ParticipantView({ eventId }: { eventId: number }) {
   console.log('>>> [PARTICIPANT] Rendering for eventId:', eventId);
+  const theme = useTheme();
+  const isLargeScreen = useMediaQuery(theme.breakpoints.up('md'));
+
   const [event, setEvent] = useState<any>(null);
   const [slides, setSlides] = useState<Slide[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [teams, setTeams] = useState<any[]>([]);
   const [scores, setScores] = useState<Record<string, boolean>>({});
+  const [multipliers, setMultipliers] = useState<Record<string, number>>({});
+  const [questionRoundMap, setQuestionRoundMap] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -39,6 +44,7 @@ export default function ParticipantView({ eventId }: { eventId: number }) {
       setEvent(currentEvent);
 
       const slideList: Slide[] = [];
+      const qRoundMap: Record<number, number> = {};
       slideList.push({ type: 'event_title', title: currentEvent.title });
 
       const setsRes = await fetch(`/api/events/${eventId}/sets`);
@@ -50,12 +56,14 @@ export default function ParticipantView({ eventId }: { eventId: number }) {
         const questions = await qRes.json();
         for (const q of questions) {
           slideList.push({ type: 'question', data: q });
+          qRoundMap[q.id] = set.id;
         }
         slideList.push({ type: 'intermission', title: `${set.name} Complete` });
       }
 
       slideList.push({ type: 'event_end', title: 'Trivia Night Complete' });
       setSlides(slideList);
+      setQuestionRoundMap(qRoundMap);
       setCurrentIndex(currentEvent.current_slide_index || 0);
       setLoading(false);
     } catch (err) {
@@ -64,20 +72,28 @@ export default function ParticipantView({ eventId }: { eventId: number }) {
   }, [eventId]);
 
   const fetchScores = useCallback(async () => {
-    const [tRes, aRes] = await Promise.all([
+    const [tRes, aRes, mRes] = await Promise.all([
       fetch(`/api/events/${eventId}/teams`),
-      fetch(`/api/events/${eventId}/answers`)
+      fetch(`/api/events/${eventId}/answers`),
+      fetch(`/api/events/${eventId}/multipliers`)
     ]);
     const teamData = await tRes.json();
     const answerData = await aRes.json();
+    const multiplierData = await mRes.json();
     
     const scoresMap: Record<string, boolean> = {};
     answerData.forEach((a: any) => {
       scoresMap[`${a.team_id}-${a.question_id}-${a.answer_index}`] = !!a.is_correct;
     });
+
+    const multipliersMap: Record<string, number> = {};
+    multiplierData.forEach((m: any) => {
+      multipliersMap[`${m.team_id}-${m.set_id}`] = m.multiplier;
+    });
     
     setTeams(teamData);
     setScores(scoresMap);
+    setMultipliers(multipliersMap);
   }, [eventId]);
 
   useEffect(() => { 
@@ -106,7 +122,24 @@ export default function ParticipantView({ eventId }: { eventId: number }) {
 
   const calculateLeaderboard = () => {
     return teams.map(team => {
-      const total = Object.keys(scores).filter(k => k.startsWith(`${team.id}-`) && scores[k]).length;
+      let total = 0;
+      // Group scores by question, then apply multiplier for that question's round
+      const teamScoreKeys = Object.keys(scores).filter(k => k.startsWith(`${team.id}-`) && scores[k]);
+      
+      const roundScores: Record<number, number> = {};
+      teamScoreKeys.forEach(key => {
+        const [_, qId] = key.split('-').map(Number);
+        const roundId = questionRoundMap[qId];
+        if (roundId) {
+            roundScores[roundId] = (roundScores[roundId] || 0) + 1;
+        }
+      });
+
+      Object.entries(roundScores).forEach(([roundId, score]) => {
+        const multiplier = multipliers[`${team.id}-${roundId}`] ?? 1.0;
+        total += score * multiplier;
+      });
+
       return { ...team, score: total };
     }).sort((a, b) => b.score - a.score);
   };
@@ -115,16 +148,16 @@ export default function ParticipantView({ eventId }: { eventId: number }) {
 
   if (showLeaderboard) {
     return (
-      <Box sx={{ minHeight: '100vh', bgcolor: '#000', color: '#fff', p: 2 }}>
-        <Typography variant="h5" sx={{ mb: 3, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-          <Trophy size={24} color="#fbc02d" /> Standings
+      <Box sx={{ minHeight: '100vh', bgcolor: '#000', color: '#fff', p: isLargeScreen ? 6 : 2 }}>
+        <Typography variant={isLargeScreen ? "h2" : "h4"} sx={{ mb: isLargeScreen ? 6 : 3, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+          <Trophy size={isLargeScreen ? 48 : 24} color="#fbc02d" /> Standings
         </Typography>
-        <Stack spacing={1}>
+        <Stack spacing={isLargeScreen ? 2 : 1}>
           {calculateLeaderboard().map((t, i) => (
-            <Paper key={t.id} sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center' }}>
-              <Typography variant="h6" sx={{ mr: 2, color: i < 3 ? '#90caf9' : 'text.secondary', width: 25 }}>{i + 1}</Typography>
-              <Typography sx={{ flexGrow: 1, fontWeight: i === 0 ? 'bold' : 'normal' }}>{t.name}</Typography>
-              <Typography sx={{ fontWeight: 'bold', color: '#90caf9' }}>{t.score}</Typography>
+            <Paper key={t.id} sx={{ p: isLargeScreen ? 4 : 2, bgcolor: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center' }}>
+              <Typography variant={isLargeScreen ? "h3" : "h5"} sx={{ mr: isLargeScreen ? 4 : 2, color: i < 3 ? '#90caf9' : 'text.secondary', width: isLargeScreen ? 80 : 25 }}>{i + 1}</Typography>
+              <Typography variant={isLargeScreen ? "h4" : "body1"} sx={{ flexGrow: 1, fontWeight: i === 0 ? 'bold' : 'normal' }}>{t.name}</Typography>
+              <Typography variant={isLargeScreen ? "h3" : "h6"} sx={{ fontWeight: 'bold', color: '#90caf9' }}>{t.score.toFixed(1).replace('.0', '')}</Typography>
             </Paper>
           ))}
         </Stack>
@@ -134,30 +167,37 @@ export default function ParticipantView({ eventId }: { eventId: number }) {
 
   return (
     <Box sx={{ height: '100vh', bgcolor: '#000', color: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2 }}>
+      <Box sx={{ 
+        flexGrow: 1, 
+        overflowY: isLargeScreen ? 'hidden' : 'auto', 
+        p: isLargeScreen ? 0 : 2,
+        display: isLargeScreen ? 'flex' : 'block',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
         <Fade key={currentIndex} in timeout={500}>
-          <Box>
+          <Box sx={{ width: '100%', height: isLargeScreen ? '100%' : 'auto', display: isLargeScreen ? 'flex' : 'block', alignItems: 'center', justifyContent: 'center' }}>
             {currentSlide.type === 'event_title' && (
-              <Box sx={{ minHeight: '80vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-                <Typography variant="h3" color="primary" sx={{ fontWeight: 'bold' }}>{currentSlide.title}</Typography>
-                <Typography variant="h6" sx={{ mt: 2, opacity: 0.7 }}>Welcome to the Game!</Typography>
+              <Box sx={{ minHeight: isLargeScreen ? '100%' : '80vh', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', p: 4 }}>
+                <Typography variant={isLargeScreen ? "h1" : "h3"} color="primary" sx={{ fontWeight: 'bold' }}>{currentSlide.title}</Typography>
+                <Typography variant={isLargeScreen ? "h4" : "h6"} sx={{ mt: 4, opacity: 0.7 }}>Welcome to the Game!</Typography>
               </Box>
             )}
             {currentSlide.type === 'set_title' && (
-              <Box sx={{ minHeight: '80vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-                <Typography variant="h4" color="secondary" sx={{ fontWeight: 'bold' }}>{currentSlide.title}</Typography>
-                <Typography variant="h6" sx={{ mt: 2, opacity: 0.7 }}>Get Ready!</Typography>
+              <Box sx={{ minHeight: isLargeScreen ? '100%' : '80vh', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', p: 4 }}>
+                <Typography variant={isLargeScreen ? "h2" : "h4"} color="secondary" sx={{ fontWeight: 'bold' }}>{currentSlide.title}</Typography>
+                <Typography variant={isLargeScreen ? "h4" : "h6"} sx={{ mt: 4, opacity: 0.7 }}>Get Ready!</Typography>
               </Box>
             )}
             {currentSlide.type === 'intermission' && (
-              <Box sx={{ minHeight: '80vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-                <Typography variant="h4" sx={{ fontWeight: 'bold' }}>Intermission</Typography>
-                <Typography variant="h6" sx={{ mt: 2, opacity: 0.7 }}>Tallying scores...</Typography>
+              <Box sx={{ minHeight: isLargeScreen ? '100%' : '80vh', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', p: 4 }}>
+                <Typography variant={isLargeScreen ? "h2" : "h4"} sx={{ fontWeight: 'bold' }}>Intermission</Typography>
+                <Typography variant={isLargeScreen ? "h4" : "h6"} sx={{ mt: 4, opacity: 0.7 }}>Tallying scores...</Typography>
               </Box>
             )}
             {currentSlide.type === 'event_end' && (
-              <Box sx={{ minHeight: '80vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-                <Typography variant="h4" color="primary" sx={{ fontWeight: 'bold' }}>Thanks for Playing!</Typography>
+              <Box sx={{ minHeight: isLargeScreen ? '100%' : '80vh', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', p: 4 }}>
+                <Typography variant={isLargeScreen ? "h2" : "h4"} color="primary" sx={{ fontWeight: 'bold' }}>Thanks for Playing!</Typography>
               </Box>
             )}
             {currentSlide.type === 'question' && <ParticipantQuestionDisplay question={currentSlide.data} />}
@@ -166,15 +206,15 @@ export default function ParticipantView({ eventId }: { eventId: number }) {
       </Box>
       
       {/* Footer Info */}
-      <Box sx={{ p: 1.5, textAlign: 'center', borderTop: '1px solid #222', bgcolor: '#050505', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-        <Typography variant="caption" sx={{ opacity: 0.5 }}>
+      <Box sx={{ p: isLargeScreen ? 2 : 1.5, textAlign: 'center', borderTop: '1px solid #222', bgcolor: '#050505', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+        <Typography variant={isLargeScreen ? "h6" : "caption"} sx={{ opacity: 0.5 }}>
           {event?.title} • Slide {currentIndex + 1} of {slides.length}
         </Typography>
         <Button 
-            size="small" 
+            size={isLargeScreen ? "medium" : "small"}
             color="inherit" 
             variant="outlined" 
-            sx={{ fontSize: '0.6rem', py: 0, opacity: 0.5 }}
+            sx={{ fontSize: isLargeScreen ? '0.8rem' : '0.6rem', py: 0, opacity: 0.5 }}
             onClick={() => {
                 localStorage.removeItem('activeEventId');
                 window.location.reload();
@@ -188,6 +228,9 @@ export default function ParticipantView({ eventId }: { eventId: number }) {
 }
 
 function ParticipantQuestionDisplay({ question }: { question: any }) {
+  const theme = useTheme();
+  const isLargeScreen = useMediaQuery(theme.breakpoints.up('md'));
+
   const mcOptions = useMemo(() => {
     if (question.type !== 'multiple_choice') return [];
     return shuffle([question.content.correct, ...question.content.distractors]);
@@ -207,52 +250,51 @@ function ParticipantQuestionDisplay({ question }: { question: any }) {
   }, [question]);
 
   return (
-    <Container maxWidth="sm" sx={{ py: 2 }}>
-      <Typography variant="h6" sx={{ color: '#90caf9', fontWeight: 'bold', mb: 1, textAlign: 'center', textTransform: 'uppercase' }}>
+    <Container maxWidth={isLargeScreen ? false : "sm"} sx={{ py: isLargeScreen ? 4 : 2, pb: isLargeScreen ? 12 : 8, height: isLargeScreen ? '100%' : 'auto', display: isLargeScreen ? 'flex' : 'block', flexDirection: 'column', justifyContent: 'center' }}>
+      <Typography variant={isLargeScreen ? "h4" : "h6"} sx={{ color: '#90caf9', fontWeight: 'bold', mb: isLargeScreen ? 4 : 1, textAlign: 'center', textTransform: 'uppercase' }}>
         {question.title || 'Question'}
       </Typography>
       
       {question.media_url && (
-        <Box sx={{ width: '100%', mb: 2, display: 'flex', justifyContent: 'center' }}>
-          <img src={question.media_url} alt="media" style={{ maxWidth: '100%', maxHeight: '30vh', borderRadius: 8 }} />
+        <Box sx={{ width: '100%', mb: isLargeScreen ? 4 : 2, display: 'flex', justifyContent: 'center' }}>
+          <img src={question.media_url} alt="media" style={{ maxWidth: '100%', maxHeight: isLargeScreen ? '40vh' : '30vh', borderRadius: 8 }} />
         </Box>
       )}
 
-      <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 4, textAlign: 'center', lineHeight: 1.2 }}>
+      <Typography variant={isLargeScreen ? "h2" : "h5"} sx={{ fontWeight: 'bold', mb: isLargeScreen ? 6 : 4, textAlign: 'center', lineHeight: 1.2 }}>
         {question.prompt}
       </Typography>
 
       {question.type === 'multiple_choice' && (
-        <Stack spacing={2}>
+        <Grid container spacing={isLargeScreen ? 4 : 2}>
           {mcOptions.map((opt, i) => (
-            <Paper key={i} sx={{ p: 2, bgcolor: '#161616', border: '1px solid #333', textAlign: 'center' }}>
-              <Typography variant="h6">
-                <Box component="span" sx={{ color: '#90caf9', fontWeight: 'bold', mr: 1 }}>{String.fromCharCode(65 + i)}.</Box>
-                {opt}
-              </Typography>
-            </Paper>
+            <Grid item xs={12} md={6} key={i}>
+              <Paper sx={{ p: isLargeScreen ? 4 : 2, height: '100%', bgcolor: '#161616', border: '1px solid #333', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Typography variant={isLargeScreen ? "h3" : "h6"} sx={{ width: '100%', wordBreak: 'break-word' }}>
+                  {opt}
+                </Typography>
+              </Paper>
+            </Grid>
           ))}
-        </Stack>
+        </Grid>
       )}
 
       {question.type === 'matching' && matchingData && (
-        <Grid container spacing={2}>
+        <Grid container spacing={isLargeScreen ? 6 : 2}>
           <Grid item xs={6}>
-            <Typography variant="overline" sx={{ display: 'block', mb: 1, textAlign: 'center', opacity: 0.7 }}>Items</Typography>
-            <Stack spacing={1}>
+            <Stack spacing={isLargeScreen ? 3 : 1}>
               {matchingData.left.map((item: any, i: number) => (
-                <Paper key={i} sx={{ p: 1, bgcolor: '#111', color: '#90caf9', border: '1px solid #333', textAlign: 'center' }}>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{item}</Typography>
+                <Paper key={i} sx={{ p: isLargeScreen ? 2 : 1, bgcolor: '#111', color: '#90caf9', border: '1px solid #333', textAlign: 'center' }}>
+                  <Typography variant={isLargeScreen ? "h4" : "body1"} sx={{ fontWeight: 'bold' }}>{item}</Typography>
                 </Paper>
               ))}
             </Stack>
           </Grid>
           <Grid item xs={6}>
-            <Typography variant="overline" sx={{ display: 'block', mb: 1, textAlign: 'center', opacity: 0.7 }}>Matches</Typography>
-            <Stack spacing={1}>
+            <Stack spacing={isLargeScreen ? 3 : 1}>
               {matchingData.right.map((item: any, i: number) => (
-                <Paper key={i} sx={{ p: 1, bgcolor: '#111', color: '#f48fb1', border: '1px solid #333', textAlign: 'center' }}>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{item}</Typography>
+                <Paper key={i} sx={{ p: isLargeScreen ? 2 : 1, bgcolor: '#111', color: '#f48fb1', border: '1px solid #333', textAlign: 'center' }}>
+                  <Typography variant={isLargeScreen ? "h4" : "body1"} sx={{ fontWeight: 'bold' }}>{item}</Typography>
                 </Paper>
               ))}
             </Stack>
@@ -262,11 +304,11 @@ function ParticipantQuestionDisplay({ question }: { question: any }) {
 
       {question.type === 'sequencing' && sequenceData && (
         <Box>
-          <Typography variant="overline" sx={{ display: 'block', mb: 1, textAlign: 'center', opacity: 0.7 }}>Order these items</Typography>
-          <Stack spacing={1}>
+          <Typography variant={isLargeScreen ? "h4" : "overline"} sx={{ display: 'block', mb: 2, textAlign: 'center', opacity: 0.7 }}>Order these items</Typography>
+          <Stack spacing={isLargeScreen ? 2 : 1}>
             {sequenceData.map((item: any, i: number) => (
-              <Paper key={i} sx={{ p: 1.5, bgcolor: '#111', border: '1px solid #333', textAlign: 'center' }}>
-                <Typography variant="h6">{item}</Typography>
+              <Paper key={i} sx={{ p: isLargeScreen ? 3 : 1.5, bgcolor: '#111', border: '1px solid #333', textAlign: 'center' }}>
+                <Typography variant={isLargeScreen ? "h4" : "h6"}>{item}</Typography>
               </Paper>
             ))}
           </Stack>
@@ -274,9 +316,9 @@ function ParticipantQuestionDisplay({ question }: { question: any }) {
       )}
       
       {question.type === 'multi_part' && (
-        <Box sx={{ textAlign: 'center', p: 4, bgcolor: 'rgba(255,255,255,0.03)', borderRadius: 2 }}>
-            <Users size={48} style={{ opacity: 0.2, marginBottom: 16 }} />
-            <Typography variant="body1" sx={{ opacity: 0.7 }}>
+        <Box sx={{ textAlign: 'center', p: isLargeScreen ? 8 : 4, bgcolor: 'rgba(255,255,255,0.03)', borderRadius: 2 }}>
+            <Users size={isLargeScreen ? 96 : 48} style={{ opacity: 0.2, marginBottom: 16 }} />
+            <Typography variant={isLargeScreen ? "h4" : "body1"} sx={{ opacity: 0.7 }}>
                 Listen to the host for details!
             </Typography>
         </Box>

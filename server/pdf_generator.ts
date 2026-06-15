@@ -59,10 +59,14 @@ function renderRound(doc: typeof PDFDocument, round: Round, topOffset: number, r
     const centerX = 306;
     const colWidth = 230;
     
+    // Team Name field
+    doc.font('Helvetica').fontSize(12).text('TEAM NAME:', 54, startY);
+    doc.moveTo(135, startY + 10).lineTo(centerX + 10 + colWidth, startY + 10).stroke();
+
     // Title
-    doc.font('Helvetica-Bold').fontSize(16).text(round.title.toUpperCase(), 54, startY, { align: 'center', width: 504 });
+    doc.font('Helvetica-Bold').fontSize(16).text(round.title.toUpperCase(), 54, startY + 25, { align: 'center', width: 504 });
     
-    let currentY = startY + 30;
+    let currentY = startY + 55;
 
     const standardQuestions = round.questions.filter(q => q.type === 'multiple_choice' || q.type === 'multi_part');
     const specialQuestions = round.questions.filter(q => q.type === 'matching' || q.type === 'sequencing');
@@ -108,8 +112,8 @@ function renderMatching(doc: typeof PDFDocument, q: Question, y: number, rng: se
     doc.font('Helvetica-Oblique').fontSize(9).text('Write the matching letter/number next to each item, or draw a line connecting them.', 54, y + 15);
     
     const pairs = q.content.pairs || [];
-    const leftItems = pairs.map((p: any, i: number) => ({ text: p.left, label: String.fromCharCode(65 + i) })).sort((a: any, b: any) => a.text.localeCompare(b.text));
-    const rightItems = pairs.map((p: any, i: number) => ({ text: p.right, label: (i + 1).toString() })).sort(() => rng() - 0.5);
+    const leftItems = pairs.map((p: any) => ({ text: p.left })).sort((a: any, b: any) => a.text.localeCompare(b.text));
+    const rightItems = pairs.map((p: any) => ({ text: p.right })).sort(() => rng() - 0.5);
 
     const itemYStart = y + 35;
     const itemSpacing = 18;
@@ -117,14 +121,13 @@ function renderMatching(doc: typeof PDFDocument, q: Question, y: number, rng: se
     doc.font('Helvetica').fontSize(10);
     leftItems.forEach((item: any, i: number) => {
         const iy = itemYStart + (i * itemSpacing);
-        doc.text(`${item.label}.`, 54, iy);
-        doc.moveTo(70, iy + 10).lineTo(100, iy + 10).stroke();
-        doc.text(item.text, 110, iy);
+        // doc.moveTo(54, iy + 10).lineTo(84, iy + 10).stroke(); // Blank line for answer
+        doc.text(item.text, 95, iy);
     });
 
     rightItems.forEach((item: any, i: number) => {
         const iy = itemYStart + (i * itemSpacing);
-        doc.text(`${item.label}. ${item.text}`, 320, iy);
+        doc.text(item.text, 320, iy);
     });
 }
 

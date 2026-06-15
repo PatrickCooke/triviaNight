@@ -5,6 +5,8 @@ services:
     restart: always
     ports:
       - "8001:3000"
+    volumes:
+      - ./trivia.db:/app/trivia.db
 
   cloudflare-tunnel:
     image: cloudflare/cloudflared:latest

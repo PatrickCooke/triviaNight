@@ -13,7 +13,8 @@ import {
   ListItem,
   ListItemButton,
   ListItemText,
-  Chip
+  Chip,
+  TextField
 } from '@mui/material';
 import { X, ArrowLeft, CheckSquare, Trophy, ChevronRight } from 'lucide-react';
 
@@ -27,17 +28,20 @@ export default function TeamScorer({ event, onBack }: Props) {
   const [rounds, setRounds] = useState<any[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<any>(null);
   const [scores, setScores] = useState<Record<string, boolean>>({}); // "teamId-qId-ansIdx"
+  const [multipliers, setMultipliers] = useState<Record<string, number>>({}); // "teamId-setId"
 
   const fetchData = async () => {
-    const [tRes, sRes, aRes] = await Promise.all([
+    const [tRes, sRes, aRes, mRes] = await Promise.all([
       fetch(`/api/events/${event.id}/teams`),
       fetch(`/api/events/${event.id}/sets`),
-      fetch(`/api/events/${event.id}/answers`)
+      fetch(`/api/events/${event.id}/answers`),
+      fetch(`/api/events/${event.id}/multipliers`)
     ]);
     
     const teamData = await tRes.json();
     const setData = await sRes.json();
     const answerData = await aRes.json();
+    const multiplierData = await mRes.json();
 
     // Fetch questions for all sets
     const roundsWithQuestions = await Promise.all(setData.map(async (set: any) => {
@@ -51,9 +55,16 @@ export default function TeamScorer({ event, onBack }: Props) {
       scoresMap[`${a.team_id}-${a.question_id}-${a.answer_index}`] = !!a.is_correct;
     });
 
+    // Build multipliers map
+    const multipliersMap: Record<string, number> = {};
+    multiplierData.forEach((m: any) => {
+      multipliersMap[`${m.team_id}-${m.set_id}`] = m.multiplier;
+    });
+
     setTeams(teamData);
     setRounds(roundsWithQuestions);
     setScores(scoresMap);
+    setMultipliers(multipliersMap);
     if (teamData.length > 0 && !selectedTeam) setSelectedTeam(teamData[0]);
   };
 
@@ -73,8 +84,32 @@ export default function TeamScorer({ event, onBack }: Props) {
     });
   };
 
+  const handleMultiplierChange = async (teamId: number, setId: number, val: string) => {
+    const multiplier = parseFloat(val) || 1.0;
+    const key = `${teamId}-${setId}`;
+    setMultipliers(prev => ({ ...prev, [key]: multiplier }));
+
+    await fetch('/api/multipliers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ team_id: teamId, set_id: setId, multiplier })
+    });
+  };
+
   const getTeamScore = (teamId: number) => {
-    return Object.keys(scores).filter(k => k.startsWith(`${teamId}-`) && scores[k]).length;
+    let total = 0;
+    rounds.forEach(round => {
+        let roundScore = 0;
+        round.questions.forEach((q: any) => {
+            const answerParts = getAnswerRows(q);
+            answerParts.forEach((_, aIdx) => {
+                if (scores[`${teamId}-${q.id}-${aIdx}`]) roundScore++;
+            });
+        });
+        const multiplier = multipliers[`${teamId}-${round.id}`] ?? 1.0;
+        total += roundScore * multiplier;
+    });
+    return total;
   };
 
   if (teams.length === 0) return <Box sx={{ p: 4 }}><Typography>No teams registered. Go to Dashboard first.</Typography><Button onClick={onBack}>Back</Button></Box>;
@@ -116,25 +151,34 @@ export default function TeamScorer({ event, onBack }: Props) {
             <Typography color="text.secondary">Score Sheet Entry | {event.title}</Typography>
           </Box>
           <Box sx={{ textAlign: 'right' }}>
-            <Typography variant="h3" sx={{ fontWeight: 800, color: 'primary.main' }}>{getTeamScore(selectedTeam?.id)}</Typography>
+            <Typography variant="h3" sx={{ fontWeight: 800, color: 'primary.main' }}>{getTeamScore(selectedTeam?.id).toFixed(1).replace('.0', '')}</Typography>
             <Typography variant="caption" sx={{ textTransform: 'uppercase', letterSpacing: 1 }}>Total Points</Typography>
           </Box>
         </Stack>
 
         {rounds.map((round, rIdx) => (
           <Box key={round.id} sx={{ mb: 6 }}>
-            <Typography variant="h5" color="secondary" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              Round {rIdx + 1}: {round.name}
-            </Typography>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+                <Typography variant="h5" color="secondary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    Round {rIdx + 1}: {round.name}
+                </Typography>
+                <Stack direction="row" alignItems="center" spacing={2}>
+                    <Typography variant="body2" color="text.secondary">Round Multiplier:</Typography>
+                    <TextField 
+                        size="small"
+                        type="number"
+                        inputProps={{ step: 0.5, min: 1 }}
+                        sx={{ width: 80 }}
+                        value={multipliers[`${selectedTeam.id}-${round.id}`] ?? 1.0}
+                        onChange={(e) => handleMultiplierChange(selectedTeam.id, round.id, e.target.value)}
+                    />
+                </Stack>
+            </Stack>
             <Divider sx={{ mb: 3 }} />
             
             <Stack spacing={3}>
               {round.questions.map((q: any) => {
-                const answerParts: string[] = [];
-                if (q.type === 'multiple_choice') answerParts.push(q.content.correct);
-                else if (q.type === 'multi_part') q.content.parts.forEach((p: any) => answerParts.push(`${p.text} ${p.range ? `±${p.range}` : ''}`));
-                else if (q.type === 'matching') q.content.pairs.forEach((p: any) => answerParts.push(`${p.left}: ${p.right}`));
-                else if (q.type === 'sequencing') q.content.items.forEach((it: string, i: number) => answerParts.push(`${i+1}. ${it}`));
+                const answerParts = getAnswerRows(q);
 
                 return (
                   <Paper key={q.id} sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.01)', border: '1px solid #222' }}>
@@ -184,4 +228,23 @@ export default function TeamScorer({ event, onBack }: Props) {
       </Box>
     </Box>
   );
+}
+
+function getAnswerRows(q: any): string[] {
+    const rows: string[] = [];
+    if (!q || !q.content) return rows;
+
+    if (q.type === 'multiple_choice') {
+        if (q.content.correct) rows.push(q.content.correct);
+    } else if (q.type === 'multi_part') {
+        const parts = q.content.parts || (q.content.answers || []).map((a: string) => ({ text: a }));
+        parts.forEach((p: any) => rows.push(`${p.text || ''} ${p.range ? `± ${p.range}` : ''}`));
+    } else if (q.type === 'matching') {
+        const pairs = q.content.pairs || [];
+        pairs.forEach((p: any) => rows.push(`${p.left || ''}: ${p.right || ''}`));
+    } else if (q.type === 'sequencing') {
+        const items = q.content.items || [];
+        items.forEach((it: string, i: number) => rows.push(`${i+1}. ${it}`));
+    }
+    return rows;
 }

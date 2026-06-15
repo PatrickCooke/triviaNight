@@ -22,9 +22,10 @@ import {
   useMediaQuery,
   useTheme
 } from '@mui/material';
-import { X, ChevronLeft, ChevronRight, Trophy, CheckSquare, Eye, EyeOff, QrCode } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Trophy, CheckSquare, Eye, EyeOff, QrCode, ClipboardList } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { QRCodeCanvas } from 'qrcode.react';
+import TeamScorer from './TeamScorer';
 
 const socket = io();
 
@@ -32,6 +33,8 @@ interface Slide {
   type: 'event_title' | 'set_title' | 'question' | 'intermission' | 'event_end';
   title?: string;
   data?: any;
+  roundNumber?: number;
+  questionNumber?: number;
 }
 
 interface Props {
@@ -46,24 +49,34 @@ export default function LiveScorer({ event, teams, sets, onExit }: Props) {
   const [currentIndex, setCurrentIndex] = useState(event.current_slide_index || 0);
   const [scores, setScores] = useState<Record<string, boolean>>({});
   const [audienceLeaderboard, setAudienceLeaderboard] = useState(false);
+  const [massScoringOpen, setMassScoringOpen] = useState(false);
 
   // 1. Build Shared Slide List
   useEffect(() => {
     const init = async () => {
       const slideList: Slide[] = [];
-      slideList.push({ type: 'event_title', title: event.title });
+      slideList.push({ type: 'event_title', title: event.title, roundNumber: 0, questionNumber: 0 });
 
+      let currentRound = 0;
       for (const set of sets) {
-        slideList.push({ type: 'set_title', title: set.name });
+        currentRound++;
+        slideList.push({ type: 'set_title', title: set.name, roundNumber: currentRound, questionNumber: 0 });
         const res = await fetch(`/api/sets/${set.id}/questions`);
         const questions = await res.json();
+        let currentQuestion = 0;
         for (const q of questions) {
-          slideList.push({ type: 'question', data: { ...q, setName: set.name } });
+          currentQuestion++;
+          slideList.push({ 
+            type: 'question', 
+            data: { ...q, setName: set.name },
+            roundNumber: currentRound,
+            questionNumber: currentQuestion
+          });
         }
-        slideList.push({ type: 'intermission', title: `${set.name} Complete` });
+        slideList.push({ type: 'intermission', title: `${set.name} Complete`, roundNumber: currentRound, questionNumber: 0 });
       }
 
-      slideList.push({ type: 'event_end', title: 'Trivia Night Complete' });
+      slideList.push({ type: 'event_end', title: 'Trivia Night Complete', roundNumber: 0, questionNumber: 0 });
       setSlides(slideList);
 
       // Join Room
@@ -129,6 +142,9 @@ export default function LiveScorer({ event, teams, sets, onExit }: Props) {
             )}
           </Box>
           <Stack direction="row" spacing={{ xs: 0, sm: 1 }} alignItems="center">
+            <IconButton onClick={() => setMassScoringOpen(true)} color="primary" title="Mass Scoring">
+              <ClipboardList />
+            </IconButton>
             <IconButton onClick={() => setQrOpen(true)} color="primary">
               <QrCode />
             </IconButton>
@@ -169,6 +185,13 @@ export default function LiveScorer({ event, teams, sets, onExit }: Props) {
         <Typography variant="h6" color="secondary">
             {currentSlide.type === 'question' ? `QUESTION: ${currentSlide.data.setName}` : currentSlide.type.replace('_', ' ').toUpperCase()}
         </Typography>
+
+        {(currentSlide.roundNumber ?? 0) > 0 && (
+            <Typography variant="subtitle2" sx={{ color: '#90caf9', fontWeight: 'bold', mb: 0.5 }}>
+                Round: {currentSlide.roundNumber} {currentSlide.questionNumber ? `- Question: ${currentSlide.questionNumber}` : ''}
+            </Typography>
+        )}
+
         <Typography variant="body2" color="text.secondary">Audience is seeing this slide</Typography>
       </Box>
 
@@ -250,15 +273,42 @@ export default function LiveScorer({ event, teams, sets, onExit }: Props) {
             </Button>
         </Stack>
       </Paper>
+
+      {/* Mass Scoring Modal */}
+      <Dialog 
+        open={massScoringOpen} 
+        onClose={() => setMassScoringOpen(false)}
+        fullScreen
+      >
+        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Box sx={{ p: 2, bgcolor: 'background.paper', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="h6">Mass Scoring - {event.title}</Typography>
+                <IconButton onClick={() => setMassScoringOpen(false)}><X /></IconButton>
+            </Box>
+            <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
+                <TeamScorer event={event} onBack={() => setMassScoringOpen(false)} />
+            </Box>
+        </Box>
+      </Dialog>
     </Box>
   );
 }
 
 function getAnswerRows(q: any): string[] {
     const rows: string[] = [];
-    if (q.type === 'multiple_choice') rows.push(q.content.correct);
-    else if (q.type === 'multi_part') q.content.parts.forEach((p: any) => rows.push(`${p.text} ${p.range ? `± ${p.range}` : ''}`));
-    else if (q.type === 'matching') q.content.pairs.forEach((p: any) => rows.push(`${p.left}: ${p.right}`));
-    else if (q.type === 'sequencing') q.content.items.forEach((it: string, i: number) => rows.push(`${i+1}. ${it}`));
+    if (!q || !q.content) return rows;
+
+    if (q.type === 'multiple_choice') {
+        if (q.content.correct) rows.push(q.content.correct);
+    } else if (q.type === 'multi_part') {
+        const parts = q.content.parts || (q.content.answers || []).map((a: string) => ({ text: a }));
+        parts.forEach((p: any) => rows.push(`${p.text || ''} ${p.range ? `± ${p.range}` : ''}`));
+    } else if (q.type === 'matching') {
+        const pairs = q.content.pairs || [];
+        pairs.forEach((p: any) => rows.push(`${p.left || ''}: ${p.right || ''}`));
+    } else if (q.type === 'sequencing') {
+        const items = q.content.items || [];
+        items.forEach((it: string, i: number) => rows.push(`${i+1}. ${it}`));
+    }
     return rows;
 }

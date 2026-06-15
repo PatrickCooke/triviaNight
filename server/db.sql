@@ -57,6 +57,13 @@ CREATE TABLE IF NOT EXISTS answers (
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS team_round_multipliers (
+    team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+    set_id INTEGER REFERENCES sets(id) ON DELETE CASCADE,
+    multiplier REAL DEFAULT 1.0,
+    PRIMARY KEY (team_id, set_id)
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_question_sets_set_id ON question_sets(set_id);
 CREATE INDEX IF NOT EXISTS idx_teams_event_id ON teams(event_id);
