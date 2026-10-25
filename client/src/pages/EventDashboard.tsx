@@ -1,8 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { 
   Box, 
-  Typography, 
-  Button, 
   Paper, 
   Stack, 
   IconButton, 
@@ -10,54 +8,49 @@ import {
   List, 
   ListItem, 
   ListItemText, 
-  Divider,
   Grid,
   Card,
   CardContent,
   Chip,
+  Button,
+  Typography,
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions,
-  FormControl,
-  RadioGroup,
+  Switch,
   FormControlLabel,
-  Radio
+  Tooltip
 } from '@mui/material';
-import { ArrowLeft, Plus, Trash2, Trophy, PlayCircle, Printer } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Trophy, PlayCircle, Printer, QrCode, X } from 'lucide-react';
+import { QRCodeCanvas } from 'qrcode.react';
 import LiveScorer from './LiveScorer';
-
-interface Team {
-  id: number;
-  name: string;
-}
-
-interface Set {
-  id: number;
-  name: string;
-  category: string;
-}
+import { Event, Team, Set } from '../types';
+import { useTeams } from '../hooks/useTeams';
+import { useSocket } from '../hooks/useSocket';
+import { PageHeader } from '../components/layout/PageHeader';
+import { PrintOptionsDialog } from '../components/events/PrintOptionsDialog';
 
 interface Props {
-  event: any;
+  event: Event;
   onBack: () => void;
 }
 
-export default function EventDashboard({ event, onBack }: Props) {
-  const [teams, setTeams] = useState<Team[]>([]);
+export default function EventDashboard({ event: initialEvent, onBack }: Props) {
+  // Local copy so we can toggle digital_input live
+  const [event, setEvent] = useState<Event>(initialEvent);
+  const { teams, addTeam, deleteTeam, refetchTeams } = useTeams(event.id);
   const [sets, setSets] = useState<Set[]>([]);
   const [newTeamName, setNewTeamName] = useState('');
   const [isScoring, setIsScoring] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
-  const [printMode, setPrintMode] = useState('questions');
+  const [qrOpen, setQrOpen] = useState(false);
+  const { on, emit } = useSocket(event.id);
+
+  const playUrl = `${window.location.origin}/?play=${event.id}`;
 
   const fetchData = async () => {
     try {
-      const [tRes, sRes] = await Promise.all([
-        fetch(`/api/events/${event.id}/teams`),
-        fetch(`/api/events/${event.id}/sets`)
-      ]);
-      setTeams(await tRes.json());
+      const sRes = await fetch(`/api/events/${event.id}/sets`);
       setSets(await sRes.json());
     } catch (err) {
       console.error('>>> [DASHBOARD] Fetch Error:', err);
@@ -68,23 +61,25 @@ export default function EventDashboard({ event, onBack }: Props) {
     fetchData();
   }, [event.id]);
 
+  // Live team updates via socket
+  useEffect(() => {
+    const cleanup = on('team_joined', () => {
+      refetchTeams();
+    });
+    return cleanup;
+  }, [on, refetchTeams]);
+
   const handleAddTeam = async () => {
     if (!newTeamName.trim()) return;
-    await fetch(`/api/events/${event.id}/teams`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newTeamName }),
-    });
+    await addTeam(newTeamName);
     setNewTeamName('');
-    fetchData();
   };
 
   const handleDeleteTeam = async (id: number) => {
-    await fetch(`/api/teams/${id}`, { method: 'DELETE' });
-    fetchData();
+    await deleteTeam(id);
   };
 
-  const handlePrint = () => {
+  const handlePrint = (printMode: string) => {
     if (printMode === 'scoresheets') {
       window.open(`/api/events/${event.id}/scoresheet`, '_blank');
     } else {
@@ -93,42 +88,98 @@ export default function EventDashboard({ event, onBack }: Props) {
     setPrintOpen(false);
   };
 
+  const handleToggleDigital = async (enabled: boolean) => {
+    const updated = { ...event, digital_input: enabled };
+    setEvent(updated);
+    await fetch(`/api/events/${event.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated)
+    });
+  };
+
   if (isScoring) {
     return <LiveScorer event={event} teams={teams} sets={sets} onExit={() => setIsScoring(false)} />;
   }
 
   return (
     <Box>
-      <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 4 }}>
-        <IconButton onClick={onBack}><ArrowLeft /></IconButton>
-        <Box>
-          <Typography variant="h4">{event.title}</Typography>
-          <Typography color="text.secondary">{new Date(event.date).toLocaleDateString()} | {event.location}</Typography>
-        </Box>
-        <Box sx={{ flexGrow: 1 }} />
-        <Stack direction="row" spacing={2}>
-          <Button 
-            variant="outlined" 
-            startIcon={<Printer />}
-            disabled={sets.length === 0}
-            onClick={() => setPrintOpen(true)}
-          >
-            Print
-          </Button>
-          <Button 
-            variant="contained" 
-            color="success" 
-            size="large" 
-            startIcon={<PlayCircle />}
-            disabled={teams.length === 0 || sets.length === 0}
-            onClick={() => setIsScoring(true)}
-          >
-            Start Live Scoring
-          </Button>
-        </Stack>
-      </Stack>
+      <PageHeader 
+        title={event.title}
+        subtitle={`${new Date(event.date).toLocaleDateString()} | ${event.location}`}
+        icon={<IconButton onClick={onBack} sx={{ ml: -1 }}><ArrowLeft /></IconButton>}
+        actions={
+          <>
+            <Button 
+              variant="outlined" 
+              startIcon={<Printer />}
+              disabled={sets.length === 0}
+              onClick={() => setPrintOpen(true)}
+            >
+              Print
+            </Button>
+            <Button 
+              variant="contained" 
+              color="success" 
+              size="large" 
+              startIcon={<PlayCircle />}
+              disabled={teams.length === 0 || sets.length === 0}
+              onClick={() => setIsScoring(true)}
+            >
+              Start Live Scoring
+            </Button>
+          </>
+        }
+      />
 
       <Grid container spacing={4}>
+        {/* Game Info Card */}
+        <Grid item xs={12}>
+          <Paper sx={{ p: 2, bgcolor: 'rgba(144,202,249,0.04)', border: '1px solid rgba(144,202,249,0.15)' }}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" flexWrap="wrap">
+              <Stack direction="row" spacing={2} alignItems="center">
+                <Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', fontWeight: 'bold' }}>Game Code</Typography>
+                  <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#90caf9', letterSpacing: 4, fontFamily: 'monospace' }}>
+                    {event.game_code || '—'}
+                  </Typography>
+                </Box>
+                <Tooltip title="Show QR Code">
+                  <IconButton color="primary" size="large" onClick={() => setQrOpen(true)} sx={{ border: '1px solid rgba(144,202,249,0.3)', borderRadius: 2 }}>
+                    <QrCode />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+
+              {event.game_mode !== 'speed' && (
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={!!event.digital_input}
+                      onChange={(e) => handleToggleDigital(e.target.checked)}
+                      color="secondary"
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>Digital Input</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {event.digital_input ? 'Players submit answers from their phones' : 'Analog scoring — paper/verbal only'}
+                      </Typography>
+                    </Box>
+                  }
+                />
+              )}
+
+              <Chip
+                label={event.game_mode === 'speed' ? 'Speed Round' : event.digital_input ? 'Pub (Digital)' : 'Pub Mode'}
+                color={event.game_mode === 'speed' ? 'warning' : event.digital_input ? 'secondary' : 'primary'}
+                sx={{ fontWeight: 'bold' }}
+              />
+            </Stack>
+          </Paper>
+        </Grid>
+
         {/* Teams Management */}
         <Grid item xs={12} md={6}>
           <Card>
@@ -171,7 +222,7 @@ export default function EventDashboard({ event, onBack }: Props) {
                 ))}
                 {teams.length === 0 && (
                   <Typography variant="body2" sx={{ p: 2, textAlign: 'center', fontStyle: 'italic' }} color="text.secondary">
-                    No teams registered yet.
+                    {event.digital_input ? 'Waiting for teams to join via QR code...' : 'No teams registered yet.'}
                   </Typography>
                 )}
               </List>
@@ -204,29 +255,30 @@ export default function EventDashboard({ event, onBack }: Props) {
         </Grid>
       </Grid>
 
-      {/* Print Options Dialog */}
-      <Dialog open={printOpen} onClose={() => setPrintOpen(false)}>
-        <DialogTitle>Print Options</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" sx={{ mb: 2 }} color="text.secondary">
-            Choose the type of document you want to generate.
+      <PrintOptionsDialog 
+        open={printOpen}
+        onClose={() => setPrintOpen(false)}
+        onPrint={handlePrint}
+      />
+
+      {/* QR Code Dialog */}
+      <Dialog open={qrOpen} onClose={() => setQrOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          Join Trivia Night
+          <IconButton onClick={() => setQrOpen(false)}><X /></IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ textAlign: 'center', py: 4, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Typography variant="h6" gutterBottom color="text.secondary">Scan to Play</Typography>
+          <Box sx={{ p: 2, bgcolor: '#fff', borderRadius: 4, display: 'inline-block', boxShadow: 3 }}>
+            <QRCodeCanvas value={playUrl} size={300} />
+          </Box>
+          <Typography variant="h4" sx={{ mt: 3, fontWeight: 'bold', fontFamily: 'monospace', color: '#90caf9', letterSpacing: 4 }}>
+            {event.game_code}
           </Typography>
-          <FormControl component="fieldset">
-            <RadioGroup value={printMode} onChange={(e) => setPrintMode(e.target.value)}>
-              <FormControlLabel value="questions" control={<Radio />} label="Questions Only" />
-              <FormControlLabel value="answers" control={<Radio />} label="Questions + Correct Answers" />
-              <FormControlLabel value="full" control={<Radio />} label="Full Take-Home (Include Distractors)" />
-              <Divider sx={{ my: 1 }} />
-              <FormControlLabel value="scoresheets" control={<Radio />} label="Participant Score Sheets (Half-Page)" />
-            </RadioGroup>
-          </FormControl>
+          <Typography variant="body2" sx={{ mt: 1, opacity: 0.5, wordBreak: 'break-all', maxWidth: 320 }}>
+            {playUrl}
+          </Typography>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPrintOpen(false)}>Cancel</Button>
-          <Button onClick={handlePrint} variant="contained" startIcon={<Printer />}>
-            Generate PDF
-          </Button>
-        </DialogActions>
       </Dialog>
     </Box>
   );

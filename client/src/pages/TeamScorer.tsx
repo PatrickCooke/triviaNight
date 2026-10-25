@@ -7,7 +7,6 @@ import {
   Paper, 
   Button,
   Grid,
-  Checkbox,
   Divider,
   List,
   ListItem,
@@ -16,7 +15,8 @@ import {
   Chip,
   TextField
 } from '@mui/material';
-import { X, ArrowLeft, CheckSquare, Trophy, ChevronRight } from 'lucide-react';
+import { X, ArrowLeft, Trophy, ChevronRight } from 'lucide-react';
+import { AnswerScorer } from '../components/scoring/AnswerScorer';
 
 interface Props {
   event: any;
@@ -191,30 +191,11 @@ export default function TeamScorer({ event, onBack }: Props) {
                         const isCorrect = !!scores[`${selectedTeam.id}-${q.id}-${aIdx}`];
                         return (
                           <Grid item xs={12} sm={6} md={4} key={aIdx}>
-                            <Box 
-                              onClick={() => handleToggle(selectedTeam.id, q.id, aIdx, isCorrect)}
-                              sx={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                p: 1, 
-                                cursor: 'pointer',
-                                borderRadius: 1,
-                                border: '1px solid',
-                                borderColor: isCorrect ? 'success.main' : '#333',
-                                bgcolor: isCorrect ? 'rgba(76, 175, 80, 0.05)' : 'transparent',
-                                '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' }
-                              }}
-                            >
-                              <Checkbox 
-                                size="small"
-                                checked={isCorrect}
-                                checkedIcon={<CheckSquare color="#4caf50" />}
-                                icon={<CheckSquare color="#444" />}
-                              />
-                              <Typography variant="body2" noWrap sx={{ ml: 1, color: isCorrect ? 'success.light' : 'text.primary' }}>
-                                {ans}
-                              </Typography>
-                            </Box>
+                            <AnswerScorer 
+                              label={ans}
+                              isCorrect={isCorrect}
+                              onToggle={() => handleToggle(selectedTeam.id, q.id, aIdx, isCorrect)}
+                            />
                           </Grid>
                         );
                       })}
@@ -238,7 +219,10 @@ function getAnswerRows(q: any): string[] {
         if (q.content.correct) rows.push(q.content.correct);
     } else if (q.type === 'multi_part') {
         const parts = q.content.parts || (q.content.answers || []).map((a: string) => ({ text: a }));
-        parts.forEach((p: any) => rows.push(`${p.text || ''} ${p.range ? `± ${p.range}` : ''}`));
+        parts.forEach((p: any, i: number) => {
+            const prefix = p.subPrompt ? `Part ${i+1} (${p.subPrompt}): ` : `Part ${i+1}: `;
+            rows.push(`${prefix}${p.text || ''}${p.range ? ` ± ${p.range}` : ''}`);
+        });
     } else if (q.type === 'matching') {
         const pairs = q.content.pairs || [];
         pairs.forEach((p: any) => rows.push(`${p.left || ''}: ${p.right || ''}`));

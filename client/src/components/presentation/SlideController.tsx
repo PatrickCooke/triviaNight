@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Box, Typography, Stack, Fade, Paper, Grid, Avatar } from '@mui/material';
 import { Trophy } from 'lucide-react';
 import { io } from 'socket.io-client';
+import QuestionResultsDisplay from './QuestionResultsDisplay';
 
 const socket = io();
 
@@ -34,6 +35,8 @@ export default function SlideController({ event, onExit }: { event: any; onExit:
     const setsRes = await fetch(`/api/events/${event.id}/sets`);
     const sets = await setsRes.json();
 
+    const isDigitalOrSpeed = event.game_mode === 'speed' || event.game_mode === 'digital' || (event.game_mode === 'pub' && !!event.digital_input);
+
     for (let i = 0; i < sets.length; i++) {
       const set = sets[i];
       slideList.push({ type: 'set_title', title: set.name });
@@ -42,6 +45,9 @@ export default function SlideController({ event, onExit }: { event: any; onExit:
       const questions = await qRes.json();
       for (const q of questions) {
         slideList.push({ type: 'question', data: q });
+        if (isDigitalOrSpeed) {
+          slideList.push({ type: 'question_results', data: q });
+        }
       }
 
       // Add intermission after each set except possibly the very last if we want Event End instead
@@ -60,9 +66,9 @@ export default function SlideController({ event, onExit }: { event: any; onExit:
     const teamData = await tRes.json();
     const answerData = await aRes.json();
     
-    const scoresMap: Record<string, boolean> = {};
+    const scoresMap: Record<string, number> = {};
     answerData.forEach((a: any) => {
-      scoresMap[`${a.team_id}-${a.question_id}-${a.answer_index}`] = !!a.is_correct;
+      scoresMap[`${a.team_id}-${a.question_id}-${a.answer_index}`] = Number(a.is_correct);
     });
     
     setTeams(teamData);
@@ -93,7 +99,12 @@ export default function SlideController({ event, onExit }: { event: any; onExit:
 
   const calculateLeaderboard = () => {
     return teams.map(team => {
-      const total = Object.keys(scores).filter(k => k.startsWith(`${team.id}-`) && scores[k]).length;
+      let total = 0;
+      Object.entries(scores).forEach(([key, val]) => {
+        if (key.startsWith(`${team.id}-`) && val) {
+          total += Number(val);
+        }
+      });
       return { ...team, score: total };
     }).sort((a, b) => b.score - a.score);
   };
@@ -134,6 +145,7 @@ export default function SlideController({ event, onExit }: { event: any; onExit:
             {currentSlide.type === 'intermission' && renderCenteredSlide('Intermission', 'Scores are being tallied...', '#fff')}
             {currentSlide.type === 'event_end' && renderCenteredSlide(currentSlide.title || '', 'Thanks for playing!', '#90caf9')}
             {currentSlide.type === 'question' && <QuestionDisplay question={currentSlide.data} />}
+            {currentSlide.type === 'question_results' && <QuestionResultsDisplay question={currentSlide.data} eventId={event.id} isPresentation />}
             </Box>
         </Fade>
       )}
@@ -209,6 +221,24 @@ function QuestionDisplay({ question }: { question: any }) {
                 <Typography variant="h4" sx={{ fontWeight: 700 }}>{item}</Typography>
               </Paper>
             ))}
+          </Stack>
+        )}
+
+        {question.type === 'multi_part' && (
+          <Stack spacing={2} sx={{ width: '100%', maxWidth: '800px', textAlign: 'left' }}>
+            {(question.content?.parts || (question.content?.answers || []).map((a: string) => ({ text: a }))).map((part: any, i: number) => {
+              const blanksCount = part.hintBlanks ? parseInt(part.hintBlanks, 10) : 15;
+              const underscores = '_'.repeat(blanksCount);
+              return (
+                <Paper key={i} sx={{ p: 2, bgcolor: '#111', color: '#fff', border: '3px solid #333' }}>
+                  <Typography variant="h4">
+                    <span style={{ color: '#90caf9', fontWeight: 'bold' }}>{i + 1}. </span>
+                    {part.subPrompt ? `${part.subPrompt} ` : ''}
+                    <span style={{ fontFamily: 'monospace', letterSpacing: 2, color: 'rgba(255,255,255,0.5)' }}>{underscores}</span>
+                  </Typography>
+                </Paper>
+              );
+            })}
           </Stack>
         )}
       </Box>

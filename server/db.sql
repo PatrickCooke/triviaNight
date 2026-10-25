@@ -5,7 +5,10 @@ CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
     date DATETIME DEFAULT CURRENT_TIMESTAMP,
-    location TEXT
+    location TEXT,
+    game_code TEXT UNIQUE,
+    current_slide_index INTEGER DEFAULT 0,
+    game_mode TEXT CHECK(game_mode IN ('analog', 'digital', 'speed')) DEFAULT 'analog'
 );
 
 -- 2. Sets
@@ -45,7 +48,8 @@ CREATE TABLE IF NOT EXISTS question_sets (
 CREATE TABLE IF NOT EXISTS teams (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
-    name TEXT NOT NULL
+    name TEXT NOT NULL,
+    session_token TEXT
 );
 
 -- 7. Answers (Analytics)
@@ -53,7 +57,10 @@ CREATE TABLE IF NOT EXISTS answers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE,
     question_id INTEGER REFERENCES questions(id) ON DELETE CASCADE,
+    answer_index INTEGER DEFAULT 0,
     is_correct BOOLEAN DEFAULT 0,
+    submitted_value TEXT,
+    is_graded INTEGER DEFAULT 1,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

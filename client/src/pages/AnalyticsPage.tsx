@@ -11,15 +11,25 @@ import {
   TableHead, 
   TableRow,
   Chip,
-  Card,
-  CardContent,
   Stack
 } from '@mui/material';
-import { TrendingUp, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Team, Question } from '../types';
+import { PageHeader } from '../components/layout/PageHeader';
+import { StatsCard } from '../components/analytics/StatsCard';
+
+interface QuestionStat extends Question {
+    correct_answers: number;
+    total_attempts: number;
+}
+
+interface TeamStat extends Team {
+    event_title: string;
+}
 
 export default function AnalyticsPage() {
-  const [questionStats, setQuestionStats] = useState<any[]>([]);
-  const [teamStats, setTeamStats] = useState<any[]>([]);
+  const [questionStats, setQuestionStats] = useState<QuestionStat[]>([]);
+  const [teamStats, setTeamStats] = useState<TeamStat[]>([]);
 
   useEffect(() => {
     Promise.all([
@@ -40,42 +50,34 @@ export default function AnalyticsPage() {
 
   return (
     <Box>
-      <Typography variant="h4" sx={{ mb: 4 }}>Analytics & Insights</Typography>
+      <PageHeader title="Analytics & Insights" />
 
       <Grid container spacing={4}>
         {/* Key Metrics */}
         <Grid item xs={12} md={4}>
-          <Card sx={{ bgcolor: 'rgba(76, 175, 80, 0.1)', border: '1px solid rgba(76, 175, 80, 0.3)' }}>
-            <CardContent>
-              <Stack direction="row" alignItems="center" spacing={2}>
-                <CheckCircle2 color="#4caf50" />
-                <Typography variant="h6">Questions Balanced</Typography>
-              </Stack>
-              <Typography variant="h3" sx={{ mt: 2, fontWeight: 'bold' }}>
-                {questionStats.filter(q => {
-                    const p = (q.correct_answers / q.total_attempts) * 100;
-                    return p >= 40 && p <= 60;
-                }).length}
-              </Typography>
-            </CardContent>
-          </Card>
+          <StatsCard 
+            title="Questions Balanced"
+            value={questionStats.filter(q => {
+                const p = (q.correct_answers / q.total_attempts) * 100;
+                return p >= 40 && p <= 60;
+            }).length}
+            icon={<CheckCircle2 />}
+            color="#4caf50"
+            description="Score between 40% and 60%"
+          />
         </Grid>
 
         <Grid item xs={12} md={4}>
-          <Card sx={{ bgcolor: 'rgba(244, 67, 54, 0.1)', border: '1px solid rgba(244, 67, 54, 0.3)' }}>
-            <CardContent>
-              <Stack direction="row" alignItems="center" spacing={2}>
-                <AlertCircle color="#f44336" />
-                <Typography variant="h6">Needs Review</Typography>
-              </Stack>
-              <Typography variant="h3" sx={{ mt: 2, fontWeight: 'bold' }}>
-                {questionStats.filter(q => {
-                    const p = (q.correct_answers / q.total_attempts) * 100;
-                    return p >= 90 || p <= 20;
-                }).length}
-              </Typography>
-            </CardContent>
-          </Card>
+          <StatsCard 
+            title="Needs Review"
+            value={questionStats.filter(q => {
+                const p = (q.correct_answers / q.total_attempts) * 100;
+                return p >= 90 || p <= 20;
+            }).length}
+            icon={<AlertCircle />}
+            color="#f44336"
+            description="Score >90% or <20%"
+          />
         </Grid>
 
         {/* Question Difficulty Table */}

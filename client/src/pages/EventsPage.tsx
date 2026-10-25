@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { 
   Typography, 
   Button, 
@@ -19,115 +19,54 @@ import {
   Autocomplete,
   Chip,
   Divider,
-  Box
+  Box,
+  CircularProgress
 } from '@mui/material';
 import { Trash2, Plus, Edit2, Layers, Gauge, ClipboardList } from 'lucide-react';
 import EventDashboard from './EventDashboard';
 import TeamScorer from './TeamScorer';
-
-interface Event {
-  id: number;
-  title: string;
-  date: string;
-  location: string;
-}
-
-interface Set {
-  id: number;
-  name: string;
-}
+import { useEvents } from '../hooks/useEvents';
+import { useSets } from '../hooks/useSets';
+import { Event, Set } from '../types';
+import { PageHeader } from '../components/layout/PageHeader';
+import { ManageSetsDialog } from '../components/events/ManageSetsDialog';
+import { EventFormDialog } from '../components/events/EventFormDialog';
 
 export default function EventsPage() {
-  const [events, setEvents] = useState<Event[]>([]);
-  const [sets, setSets] = useState<Set[]>([]);
+  const { events, loading: eventsLoading, saveEvent, deleteEvent } = useEvents();
+  const { sets } = useSets();
+
   const [open, setOpen] = useState(false);
   const [manageSetsOpen, setManageSetsOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [activeEvent, setActiveEvent] = useState<Event | null>(null);
-  const [eventSets, setEventSets] = useState<Set[]>([]);
   const [viewingDashboard, setViewingDashboard] = useState<Event | null>(null);
   const [viewingTeamScorer, setViewingTeamScorer] = useState<Event | null>(null);
-  
-  const [formData, setFormData] = useState({ title: '', date: '', location: '' });
-
-  const fetchData = async () => {
-    console.log('>>> [EVENTS] Fetching data...');
-    try {
-      const [evRes, setRes] = await Promise.all([
-        fetch('/api/events'),
-        fetch('/api/sets')
-      ]);
-      const evData = await evRes.json();
-      const setData = await setRes.json();
-      console.log('>>> [EVENTS] Received:', evData.length, 'events');
-      setEvents(evData);
-      setSets(setData);
-    } catch (err) {
-      console.error('>>> [EVENTS] Fetch error:', err);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, []);
 
   const handleOpenCreate = () => {
     setEditingEvent(null);
-    setFormData({ title: '', date: '', location: '' });
     setOpen(true);
   };
 
   const handleOpenEdit = (event: Event) => {
     setEditingEvent(event);
-    setFormData({ 
-      title: event.title, 
-      date: new Date(event.date).toISOString().slice(0, 16), 
-      location: event.location 
-    });
     setOpen(true);
   };
 
-  const handleSave = async () => {
-    const url = editingEvent ? `/api/events/${editingEvent.id}` : '/api/events';
-    const method = editingEvent ? 'PUT' : 'POST';
-    
-    await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData),
-    });
+  const handleSave = async (formData: any) => {
+    await saveEvent({ ...editingEvent, ...formData });
     setOpen(false);
-    fetchData();
   };
 
   const handleDelete = async (id: number) => {
     if (confirm('Are you sure you want to delete this event?')) {
-      await fetch(`/api/events/${id}`, { method: 'DELETE' });
-      fetchData();
+      await deleteEvent(id);
     }
   };
 
-  const handleManageSets = async (event: Event) => {
+  const handleManageSets = (event: Event) => {
     setActiveEvent(event);
-    const res = await fetch(`/api/events/${event.id}/sets`);
-    setEventSets(await res.json());
     setManageSetsOpen(true);
-  };
-
-  const addSetToEvent = async (setId: number) => {
-    if (!activeEvent) return;
-    await fetch(`/api/events/${activeEvent.id}/sets`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ set_id: setId }),
-    });
-    handleManageSets(activeEvent);
-  };
-
-  const removeSetFromEvent = async (setId: number) => {
-    if (!activeEvent) return;
-    await fetch(`/api/events/${activeEvent.id}/sets/${setId}`, { method: 'DELETE' });
-    handleManageSets(activeEvent);
   };
 
   if (viewingDashboard) {
@@ -138,14 +77,18 @@ export default function EventsPage() {
     return <TeamScorer event={viewingTeamScorer} onBack={() => setViewingTeamScorer(null)} />;
   }
 
+  if (eventsLoading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;
+
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-        <Typography variant="h4">Events</Typography>
-        <Button variant="contained" startIcon={<Plus />} onClick={handleOpenCreate}>
-          New Event
-        </Button>
-      </div>
+    <Box>
+      <PageHeader 
+        title="Events" 
+        actions={
+          <Button variant="contained" startIcon={<Plus />} onClick={handleOpenCreate}>
+            New Event
+          </Button>
+        }
+      />
 
       <TableContainer component={Paper}>
         <Table>
@@ -154,6 +97,7 @@ export default function EventsPage() {
               <TableCell>Title</TableCell>
               <TableCell>Date</TableCell>
               <TableCell>Location</TableCell>
+              <TableCell>Mode</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -163,6 +107,17 @@ export default function EventsPage() {
                 <TableCell>{event.title}</TableCell>
                 <TableCell>{new Date(event.date).toLocaleString()}</TableCell>
                 <TableCell>{event.location}</TableCell>
+                <TableCell>
+                  <Chip 
+                    label={
+                      event.game_mode === 'speed' ? 'Speed Round' 
+                      : event.digital_input ? 'Pub (Digital)' 
+                      : 'Pub Mode'
+                    } 
+                    size="small" 
+                    color={event.game_mode === 'speed' ? 'warning' : event.digital_input ? 'secondary' : 'primary'}
+                  />
+                </TableCell>
                 <TableCell align="right">
                   <Stack direction="row" spacing={1} justifyContent="flex-end">
                     <IconButton color="warning" onClick={() => setViewingTeamScorer(event)} title="Team Score Sheets">
@@ -188,71 +143,19 @@ export default function EventsPage() {
         </Table>
       </TableContainer>
 
-      {/* Edit/Create Dialog */}
-      <Dialog open={open} onClose={() => setOpen(false)}>
-        <DialogTitle>{editingEvent ? 'Edit Event' : 'Create New Event'}</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Event Title"
-            fullWidth
-            value={formData.title}
-            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-          />
-          <TextField
-            margin="dense"
-            label="Date"
-            type="datetime-local"
-            fullWidth
-            InputLabelProps={{ shrink: true }}
-            value={formData.date}
-            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-          />
-          <TextField
-            margin="dense"
-            label="Location"
-            fullWidth
-            value={formData.location}
-            onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained">Save</Button>
-        </DialogActions>
-      </Dialog>
+      <EventFormDialog 
+        open={open}
+        onClose={() => setOpen(false)}
+        onSave={handleSave}
+        initialData={editingEvent}
+      />
 
-      {/* Manage Sets Dialog */}
-      <Dialog open={manageSetsOpen} onClose={() => setManageSetsOpen(false)} fullWidth>
-        <DialogTitle>Manage Sets for: {activeEvent?.title}</DialogTitle>
-        <DialogContent>
-          <Box sx={{ mt: 2, mb: 3 }}>
-            <Typography variant="subtitle2" gutterBottom>Assigned Sets</Typography>
-            <Stack direction="row" spacing={1} flexWrap="wrap">
-              {eventSets.map(s => (
-                <Chip 
-                  key={s.id} 
-                  label={s.name} 
-                  onDelete={() => removeSetFromEvent(s.id)}
-                  color="primary"
-                />
-              ))}
-              {eventSets.length === 0 && <Typography variant="body2" color="text.secondary">No sets assigned yet.</Typography>}
-            </Stack>
-          </Box>
-          <Divider sx={{ my: 2 }} />
-          <Autocomplete
-            options={sets.filter(s => !eventSets.find(es => es.id === s.id))}
-            getOptionLabel={(option) => option.name}
-            onChange={(_, newValue) => newValue && addSetToEvent(newValue.id)}
-            renderInput={(params) => <TextField {...params} label="Add a Set to this Event" />}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setManageSetsOpen(false)}>Close</Button>
-        </DialogActions>
-      </Dialog>
-    </div>
+      <ManageSetsDialog 
+        open={manageSetsOpen}
+        onClose={() => setManageSetsOpen(false)}
+        event={activeEvent}
+        allSets={sets}
+      />
+    </Box>
   );
 }

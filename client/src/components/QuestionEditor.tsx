@@ -157,43 +157,64 @@ export default function QuestionEditor({ open, onClose, onSave, initialData }: P
             <Stack spacing={2}>
               <Typography variant="subtitle2">Answer Key (Parts)</Typography>
               {content.parts?.map((part: any, i: number) => (
-                <Stack direction="row" spacing={2} key={i} alignItems="center">
-                  <FormControl sx={{ minWidth: 120 }}>
-                    <InputLabel>Format</InputLabel>
-                    <Select size="small" value={part.type} label="Format" onChange={(e) => updatePart(i, 'type', e.target.value)}>
-                      <MenuItem value="text">Text</MenuItem>
-                      <MenuItem value="number">Number</MenuItem>
-                    </Select>
-                  </FormControl>
-                  
-                  <TextField 
-                    size="small" 
-                    fullWidth 
-                    type={part.type === 'number' ? 'number' : 'text'}
-                    label={part.type === 'number' ? 'Correct Value' : 'Correct Answer'} 
-                    value={part.text} 
-                    onChange={(e) => updatePart(i, 'text', e.target.value)} 
-                  />
-
-                  {part.type === 'number' && (
+                <Stack spacing={2} key={i} sx={{ p: 2, border: '1px solid #333', borderRadius: 1, bgcolor: 'rgba(255,255,255,0.01)' }}>
+                  <Stack direction="row" spacing={2} alignItems="center">
+                    <Typography variant="body2" sx={{ fontWeight: 'bold', minWidth: 50 }}>Part {i + 1}</Typography>
+                    <FormControl sx={{ minWidth: 120 }} size="small">
+                      <InputLabel>Format</InputLabel>
+                      <Select size="small" value={part.type || 'text'} label="Format" onChange={(e) => updatePart(i, 'type', e.target.value)}>
+                        <MenuItem value="text">Text</MenuItem>
+                        <MenuItem value="number">Number</MenuItem>
+                      </Select>
+                    </FormControl>
+                    
                     <TextField 
                       size="small" 
-                      sx={{ width: 150 }} 
-                      type="number"
-                      label="Range" 
-                      placeholder="e.g. 100"
-                      InputProps={{ startAdornment: <InputAdornment position="start">±</InputAdornment> }}
-                      value={part.range} 
-                      onChange={(e) => updatePart(i, 'range', e.target.value)} 
+                      fullWidth 
+                      type={part.type === 'number' ? 'number' : 'text'}
+                      label={part.type === 'number' ? 'Correct Value' : 'Correct Answer'} 
+                      value={part.text || ''} 
+                      onChange={(e) => updatePart(i, 'text', e.target.value)} 
                     />
-                  )}
 
-                  <IconButton color="error" onClick={() => setContent({ ...content, parts: content.parts.filter((_: any, idx: number) => idx !== i) })} disabled={content.parts.length <= 1}>
-                    <Trash2 size={20} />
-                  </IconButton>
+                    {part.type === 'number' && (
+                      <TextField 
+                        size="small" 
+                        sx={{ width: 150 }} 
+                        type="number"
+                        label="Range" 
+                        placeholder="e.g. 100"
+                        InputProps={{ startAdornment: <InputAdornment position="start">±</InputAdornment> }}
+                        value={part.range || ''} 
+                        onChange={(e) => updatePart(i, 'range', e.target.value)} 
+                      />
+                    )}
+
+                    <IconButton color="error" onClick={() => setContent({ ...content, parts: content.parts.filter((_: any, idx: number) => idx !== i) })} disabled={content.parts.length <= 1}>
+                      <Trash2 size={20} />
+                    </IconButton>
+                  </Stack>
+                  <Stack direction="row" spacing={2}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      label="Sub-question / Prompt (Optional)"
+                      value={part.subPrompt || ''}
+                      onChange={(e) => updatePart(i, 'subPrompt', e.target.value)}
+                    />
+                    <TextField
+                      size="small"
+                      type="number"
+                      sx={{ width: 200 }}
+                      label="Hint Blanks Count"
+                      placeholder="Default (15)"
+                      value={part.hintBlanks || ''}
+                      onChange={(e) => updatePart(i, 'hintBlanks', e.target.value ? parseInt(e.target.value, 10) : '')}
+                    />
+                  </Stack>
                 </Stack>
               ))}
-              <Button startIcon={<Plus />} onClick={() => setContent({ ...content, parts: [...content.parts, { text: '', type: 'text', range: '' }] })}>
+              <Button startIcon={<Plus />} onClick={() => setContent({ ...content, parts: [...content.parts, { text: '', type: 'text', range: '', subPrompt: '', hintBlanks: '' }] })}>
                 Add Answer Part
               </Button>
             </Stack>

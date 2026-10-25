@@ -28,3 +28,9 @@ export function initDb() {
         console.error('>>> [DB] Init Error:', error);
     }
 }
+
+const dbProxy = new Proxy({} as any, {
+    get: (_, prop) => (getDb() as any)[prop]
+});
+
+export default dbProxy;

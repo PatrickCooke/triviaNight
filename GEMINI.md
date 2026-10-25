@@ -8,6 +8,7 @@ A robust, local-first tool for managing trivia "Events", "Sets", and "Questions"
 ## Core Mandates
 - **Performance:** Optimized for Raspberry Pi hardware.
 - **Reliability:** SQLite-backed local-first data integrity.
+- **Maintainability** Keep code simple and maintainable
 - **UX:** Seamless slide-based navigation and intuitive CRUD for data entry.
 
 ## Response suggestions

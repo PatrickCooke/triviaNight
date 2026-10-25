@@ -1,63 +1,37 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { 
-  Typography, 
-  Paper, 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableContainer, 
-  TableHead, 
-  TableRow,
-  Chip,
   Box,
   TextField,
   InputAdornment,
-  IconButton,
   Stack,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Button
+  Button,
+  CircularProgress,
+  Typography
 } from '@mui/material';
-import { Search, Plus, Edit2, Trash2, FileUp } from 'lucide-react';
+import { Search, Plus, FileUp } from 'lucide-react';
 import QuestionEditor from '../components/QuestionEditor';
-
-interface Question {
-  id: number;
-  type: string;
-  category: string;
-  prompt: string;
-  content: any;
-  media_url?: string;
-}
+import { useQuestions } from '../hooks/useQuestions';
+import { Question } from '../types';
+import { PageHeader } from '../components/layout/PageHeader';
+import { QuestionTable } from '../components/QuestionTable';
+import { BulkImportDialog } from '../components/questions/BulkImportDialog';
 
 export default function AllQuestionsPage() {
-  const [questions, setQuestions] = useState<Question[]>([]);
+  const { questions, loading, saveQuestion, deleteQuestion, bulkImport } = useQuestions();
   const [search, setSearch] = useState('');
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkData, setBulkData] = useState('');
   
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
 
-  const fetchAllQuestions = async () => {
-    const res = await fetch('/api/questions');
-    setQuestions(await res.json());
-  };
-
-  useEffect(() => {
-    fetchAllQuestions();
-  }, []);
-
-  const handleBulkImport = async () => {
+  const handleBulkImport = async (bulkData: string) => {
    try {
      const parsed = JSON.parse(bulkData);
-     const res = await fetch('/api/questions/bulk', {
-       method: 'POST',
-       headers: { 'Content-Type': 'application/json' },
-       body: JSON.stringify({ questions: parsed }),
-     });
+     const res = await bulkImport(parsed);
 
      if (!res.ok) {
        const errData = await res.json();
@@ -67,30 +41,20 @@ export default function AllQuestionsPage() {
      const result = await res.json();
      alert(`Success: ${result.message}`);
      setBulkOpen(false);
-     setBulkData('');
-     fetchAllQuestions();
    } catch (e: any) {
      console.error('Import failed:', e);
      alert(`Import failed: ${e.message}`);
    }
   };
+
   const handleSaveQuestion = async (qData: any) => {
-    const url = qData.id ? `/api/questions/${qData.id}` : '/api/questions';
-    const method = qData.id ? 'PUT' : 'POST';
-    
-    await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(qData),
-    });
+    await saveQuestion(qData);
     setEditorOpen(false);
-    fetchAllQuestions();
   };
 
   const handleDelete = async (id: number) => {
     if (confirm('Permanently delete this question from the bank?')) {
-      await fetch(`/api/questions/${id}`, { method: 'DELETE' });
-      fetchAllQuestions();
+      await deleteQuestion(id);
     }
   };
 
@@ -100,19 +64,23 @@ export default function AllQuestionsPage() {
     (q.category || '').toLowerCase().includes(search.toLowerCase())
   );
 
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;
+
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" sx={{ mb: 3 }}>
-        <Typography variant="h4">Question Bank</Typography>
-        <Stack direction="row" spacing={1}>
-          <Button variant="outlined" startIcon={<FileUp />} onClick={() => setBulkOpen(true)}>
-            Bulk Import
-          </Button>
-          <Button variant="contained" startIcon={<Plus />} onClick={() => { setEditingQuestion(null); setEditorOpen(true); }}>
-            Add Question
-          </Button>
-        </Stack>
-      </Stack>
+      <PageHeader 
+        title="Question Bank" 
+        actions={
+          <>
+            <Button variant="outlined" startIcon={<FileUp />} onClick={() => setBulkOpen(true)}>
+              Bulk Import
+            </Button>
+            <Button variant="contained" startIcon={<Plus />} onClick={() => { setEditingQuestion(null); setEditorOpen(true); }}>
+              Add Question
+            </Button>
+          </>
+        }
+      />
       
       <TextField
         fullWidth
@@ -130,37 +98,11 @@ export default function AllQuestionsPage() {
         }}
       />
 
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Category</TableCell>
-              <TableCell>Type</TableCell>
-              <TableCell>Prompt</TableCell>
-              <TableCell align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {filtered.map((q) => (
-              <TableRow key={q.id}>
-                <TableCell>
-                  <Chip label={q.category || 'Uncategorized'} size="small" variant="outlined" />
-                </TableCell>
-                <TableCell>
-                  <Chip label={q.type.replace('_', ' ')} size="small" color="primary" />
-                </TableCell>
-                <TableCell sx={{ maxWidth: 400 }}>{q.prompt}</TableCell>
-                <TableCell align="right">
-                  <Stack direction="row" spacing={1} justifyContent="flex-end">
-                    <IconButton color="primary" onClick={() => { setEditingQuestion(q); setEditorOpen(true); }}><Edit2 size={18} /></IconButton>
-                    <IconButton color="error" onClick={() => handleDelete(q.id)}><Trash2 size={18} /></IconButton>
-                  </Stack>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      <QuestionTable 
+        questions={filtered}
+        onEdit={(q) => { setEditingQuestion(q); setEditorOpen(true); }}
+        onDelete={handleDelete}
+      />
 
       <QuestionEditor 
         open={editorOpen} 
@@ -169,60 +111,11 @@ export default function AllQuestionsPage() {
         initialData={editingQuestion} 
       />
 
-      {/* Bulk Import Dialog */}
-      <Dialog open={bulkOpen} onClose={() => setBulkOpen(false)} fullWidth maxWidth="md">
-        <DialogTitle>Bulk Import Questions (JSON)</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" sx={{ mb: 2 }}>
-            Paste a JSON array of questions. Format:
-            <pre style={{ background: '#333', padding: 8, borderRadius: 4, fontSize: '0.8rem', overflowX: 'auto' }}>
-{`[
-  {
-    "type": "multiple_choice",
-    "category": "Science",
-    "prompt": "What is 2+2?",
-    "content": { "correct": "4", "distractors": ["1", "2", "3"] }
-  },
-  {
-    "type": "multi_part",
-    "category": "Art",
-    "prompt": "Name the primary colors.",
-    "content": { "answers": ["Red", "Blue", "Yellow"] }
-  },
-  {
-    "type": "matching",
-    "category": "Geography",
-    "prompt": "Match country to capital.",
-    "content": { 
-      "pairs": [
-        {"left": "France", "right": "Paris"},
-        {"left": "Japan", "right": "Tokyo"}
-      ] 
-    }
-  },
-  {
-    "type": "sequencing",
-    "category": "Nature",
-    "prompt": "Order by size (small to large).",
-    "content": { "items": ["Mouse", "Dog", "Elephant"] }
-  }
-]`}
-            </pre>
-          </Typography>
-          <TextField
-            fullWidth
-            multiline
-            rows={10}
-            placeholder='[{"type": "multiple_choice", ...}, {"type": "multi_part", ...}]'
-            value={bulkData}
-            onChange={(e) => setBulkData(e.target.value)}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setBulkOpen(false)}>Cancel</Button>
-          <Button onClick={handleBulkImport} variant="contained" disabled={!bulkData}>Import</Button>
-        </DialogActions>
-      </Dialog>
+      <BulkImportDialog 
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        onImport={handleBulkImport}
+      />
     </Box>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { 
   Typography, 
   Button, 
@@ -16,40 +16,22 @@ import {
   TextField,
   IconButton,
   Stack,
-  Chip
+  Chip,
+  CircularProgress,
+  Box
 } from '@mui/material';
 import { Trash2, Plus, MessageCircleQuestion, Edit2 } from 'lucide-react';
 import QuestionsPage from './QuestionsPage';
-
-interface Set {
-  id: number;
-  name: string;
-  category: string;
-  description: string;
-}
+import { useSets } from '../hooks/useSets';
+import { Set } from '../types';
+import { PageHeader } from '../components/layout/PageHeader';
 
 export default function SetsPage() {
-  const [sets, setSets] = useState<Set[]>([]);
+  const { sets, loading, saveSet, deleteSet } = useSets();
   const [open, setOpen] = useState(false);
   const [editingSet, setEditingSet] = useState<Set | null>(null);
   const [formData, setFormData] = useState({ name: '', category: '', description: '' });
   const [viewingQuestions, setViewingQuestions] = useState<{ id: number; name: string } | null>(null);
-
-  const fetchSets = async () => {
-    console.log('>>> [SETS] Fetching sets...');
-    try {
-      const res = await fetch('/api/sets');
-      const data = await res.json();
-      console.log('>>> [SETS] Received:', data.length, 'sets');
-      setSets(data);
-    } catch (err) {
-      console.error('>>> [SETS] Fetch error:', err);
-    }
-  };
-
-  useEffect(() => {
-    fetchSets();
-  }, []);
 
   const handleOpenCreate = () => {
     setEditingSet(null);
@@ -59,27 +41,18 @@ export default function SetsPage() {
 
   const handleOpenEdit = (set: Set) => {
     setEditingSet(set);
-    setFormData({ name: set.name, category: set.category || '', description: set.description });
+    setFormData({ name: set.name, category: set.category || '', description: set.description || '' });
     setOpen(true);
   };
 
   const handleSave = async () => {
-    const url = editingSet ? `/api/sets/${editingSet.id}` : '/api/sets';
-    const method = editingSet ? 'PUT' : 'POST';
-
-    await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData),
-    });
+    await saveSet({ ...editingSet, ...formData });
     setOpen(false);
-    fetchSets();
   };
 
   const handleDelete = async (id: number) => {
     if (confirm('Are you sure? This will only delete the Set, not the Questions in the bank.')) {
-      await fetch(`/api/sets/${id}`, { method: 'DELETE' });
-      fetchSets();
+      await deleteSet(id);
     }
   };
 
@@ -93,14 +66,18 @@ export default function SetsPage() {
     );
   }
 
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;
+
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-        <Typography variant="h4">Question Sets</Typography>
-        <Button variant="contained" startIcon={<Plus />} onClick={handleOpenCreate}>
-          New Set
-        </Button>
-      </div>
+    <Box>
+      <PageHeader 
+        title="Question Sets" 
+        actions={
+          <Button variant="contained" startIcon={<Plus />} onClick={handleOpenCreate}>
+            New Set
+          </Button>
+        }
+      />
 
       <TableContainer component={Paper}>
         <Table>
@@ -173,6 +150,6 @@ export default function SetsPage() {
           <Button onClick={handleSave} variant="contained">Save</Button>
         </DialogActions>
       </Dialog>
-    </div>
+    </Box>
   );
 }
