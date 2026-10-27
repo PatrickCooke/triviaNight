@@ -6,12 +6,13 @@ import {
   IconButton, 
   Chip 
 } from '@mui/material';
-import { Plus, ArrowLeft, Link as LinkIcon } from 'lucide-react';
+import { Plus, ArrowLeft, Link as LinkIcon, BookOpen } from 'lucide-react';
 import QuestionEditor from '../components/QuestionEditor';
 import { Question } from '../types';
 import { PageHeader } from '../components/layout/PageHeader';
 import { QuestionTable } from '../components/QuestionTable';
 import { ItemSelectionDialog, ColumnDef } from '../components/ItemSelectionDialog';
+import ReferenceLibraryDrawer, { ReferenceResult } from '../components/ReferenceLibraryDrawer';
 
 interface Props {
   setId: number;
@@ -24,6 +25,7 @@ export default function QuestionsPage({ setId, setName, onBack }: Props) {
   const [allBankQuestions, setAllBankQuestions] = useState<Question[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
   const [pickOpen, setPickOpen] = useState(false);
+  const [refOpen, setRefOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   
   const fetchQuestions = async () => {
@@ -43,6 +45,24 @@ export default function QuestionsPage({ setId, setName, onBack }: Props) {
 
   const handleOpenCreate = () => {
     setEditingQuestion(null);
+    setEditorOpen(true);
+  };
+
+  const handleImportFromReference = (ref: ReferenceResult) => {
+    // Pre-populate the question editor from a Jeopardy clue.
+    // In Jeopardy format: `answer` is the clue, `question` is the correct response.
+    setEditingQuestion({
+      id: 0,
+      type: 'multi_part',
+      category: ref.category,
+      title: '',
+      prompt: ref.answer,           // The Jeopardy clue becomes the prompt
+      content: JSON.stringify({
+        parts: [{ subPrompt: 'Answer', text: ref.question }],
+      }),
+      media_url: '',
+    } as any);
+    setRefOpen(false);
     setEditorOpen(true);
   };
 
@@ -138,6 +158,13 @@ export default function QuestionsPage({ setId, setName, onBack }: Props) {
           <>
             <Button
               variant="outlined"
+              startIcon={<BookOpen size={16} />}
+              onClick={() => setRefOpen(true)}
+            >
+              Reference Library
+            </Button>
+            <Button
+              variant="outlined"
               startIcon={<LinkIcon />}
               onClick={() => {
                 fetchBank();
@@ -189,6 +216,12 @@ export default function QuestionsPage({ setId, setName, onBack }: Props) {
         }}
         emptyText="No questions found in bank."
         maxWidth="md"
+      />
+      {/* Reference Library Drawer */}
+      <ReferenceLibraryDrawer
+        open={refOpen}
+        onClose={() => setRefOpen(false)}
+        onImport={handleImportFromReference}
       />
     </Box>
   );

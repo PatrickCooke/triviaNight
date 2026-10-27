@@ -12,18 +12,20 @@ import {
   CircularProgress,
   Typography
 } from '@mui/material';
-import { Search, Plus, FileUp } from 'lucide-react';
+import { Search, Plus, FileUp, BookOpen } from 'lucide-react';
 import QuestionEditor from '../components/QuestionEditor';
 import { useQuestions } from '../hooks/useQuestions';
 import { Question } from '../types';
 import { PageHeader } from '../components/layout/PageHeader';
 import { QuestionTable } from '../components/QuestionTable';
 import { BulkImportDialog } from '../components/questions/BulkImportDialog';
+import ReferenceLibraryDrawer, { ReferenceResult } from '../components/ReferenceLibraryDrawer';
 
 export default function AllQuestionsPage() {
   const { questions, loading, saveQuestion, deleteQuestion, bulkImport } = useQuestions();
   const [search, setSearch] = useState('');
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [refOpen, setRefOpen] = useState(false);
   
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
@@ -52,6 +54,22 @@ export default function AllQuestionsPage() {
     setEditorOpen(false);
   };
 
+  const handleImportFromReference = (ref: ReferenceResult) => {
+    setEditingQuestion({
+      id: 0,
+      type: 'multi_part',
+      category: ref.category,
+      title: '',
+      prompt: ref.answer,
+      content: JSON.stringify({
+        parts: [{ subPrompt: 'Answer', text: ref.question }],
+      }),
+      media_url: '',
+    } as any);
+    setRefOpen(false);
+    setEditorOpen(true);
+  };
+
   const handleDelete = async (id: number) => {
     if (confirm('Permanently delete this question from the bank?')) {
       await deleteQuestion(id);
@@ -72,6 +90,9 @@ export default function AllQuestionsPage() {
         title="Question Bank" 
         actions={
           <>
+            <Button variant="outlined" startIcon={<BookOpen size={16} />} onClick={() => setRefOpen(true)}>
+              Reference Library
+            </Button>
             <Button variant="outlined" startIcon={<FileUp />} onClick={() => setBulkOpen(true)}>
               Bulk Import
             </Button>
@@ -115,6 +136,12 @@ export default function AllQuestionsPage() {
         open={bulkOpen}
         onClose={() => setBulkOpen(false)}
         onImport={handleBulkImport}
+      />
+
+      <ReferenceLibraryDrawer
+        open={refOpen}
+        onClose={() => setRefOpen(false)}
+        onImport={handleImportFromReference}
       />
     </Box>
   );

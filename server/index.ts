@@ -6,6 +6,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { getDb, initDb } from './db.js';
 import { generateScoreSheet, generateMasterPrintout } from './pdf_generator.js';
+import { searchReference } from './reference.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -924,6 +925,39 @@ app.get('/api/events/:id/questions/:questionId/results-summary', (req: any, res:
     } catch (e) {
         console.error('Results summary error:', e);
         res.status(500).json({ error: 'Failed to fetch results summary' });
+    }
+});
+
+// --- Reference Library Routes ---
+
+// GET /api/reference/search?q=space&limit=50&offset=0
+app.get('/api/reference/search', (req: any, res: any) => {
+    const query  = String(req.query.q  ?? '').trim();
+    const limit  = Math.min(parseInt(req.query.limit  as string) || 50, 200);
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    if (!query) return res.json({ results: [], total: 0 });
+
+    try {
+        const data = searchReference(query, limit, offset);
+        res.json(data);
+    } catch (e) {
+        console.error('>>> [Reference] Search error:', e);
+        res.status(500).json({ error: 'Reference search failed' });
+    }
+});
+
+// GET /api/reference/categories  — used to power autocomplete / browse
+app.get('/api/reference/categories', (_req: any, res: any) => {
+    try {
+        const db = getDb();
+        const rows = db.prepare(
+            `SELECT DISTINCT category FROM jeopardy_reference ORDER BY category LIMIT 2000`
+        ).all();
+        res.json(rows.map((r: any) => r.category));
+    } catch (e) {
+        console.error('>>> [Reference] Categories error:', e);
+        res.status(500).json({ error: 'Failed to fetch categories' });
     }
 });
 

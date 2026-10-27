@@ -12,6 +12,7 @@ import {
   useMediaQuery 
 } from '@mui/material';
 import { BarChart3, Cloud, Users } from 'lucide-react';
+import WordCloud from 'wordcloud';
 import { useSocket } from '../../hooks/useSocket';
 
 interface QuestionResultsDisplayProps {
@@ -326,7 +327,7 @@ function HistogramSection({
 }
 
 // ----------------------------------------------------
-// WORD CLOUD VIEW (Multi-Part)
+// WORD CLOUD VIEW (Multi-Part using wordcloud2.js)
 // ----------------------------------------------------
 function WordCloudSection({ 
   parts, 
@@ -342,6 +343,8 @@ function WordCloudSection({
   isMobile: boolean; 
 }) {
   const currentPart = parts[activePartIndex] || parts[0];
+  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
 
   const { minCount, maxCount } = useMemo(() => {
     if (!currentPart || !currentPart.words || currentPart.words.length === 0) {
@@ -353,6 +356,52 @@ function WordCloudSection({
       maxCount: Math.max(...counts)
     };
   }, [currentPart]);
+
+  useEffect(() => {
+    if (!canvasRef.current || !containerRef.current || !currentPart?.words?.length) return;
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    const width = container.clientWidth || (isPresentation ? 1000 : 600);
+    const height = isPresentation ? 420 : isMobile ? 240 : 320;
+
+    canvas.width = width;
+    canvas.height = height;
+
+    const list: [string, number][] = currentPart.words.map(w => [w.text, w.count]);
+
+    try {
+      WordCloud(canvas, {
+        list,
+        gridSize: Math.max(4, Math.round(8 * width / 1024)),
+        weightFactor: (weight: number) => {
+          const minFont = isPresentation ? 28 : isMobile ? 16 : 20;
+          const maxFont = isPresentation ? 80 : isMobile ? 38 : 52;
+          const spread = maxCount - minCount || 1;
+          return minFont + ((weight - minCount) / spread) * (maxFont - minFont);
+        },
+        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        fontWeight: 'bold',
+        color: () => CLOUD_COLORS[Math.floor(Math.random() * CLOUD_COLORS.length)],
+        rotateRatio: 0.25,
+        rotationSteps: 2,
+        backgroundColor: 'transparent',
+        shrinkToFit: true,
+        drawOutOfBound: false,
+      });
+    } catch (err) {
+      console.error('WordCloud error:', err);
+    }
+
+    return () => {
+      try {
+        if (typeof WordCloud.stop === 'function') {
+          WordCloud.stop();
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+  }, [currentPart, isPresentation, isMobile, minCount, maxCount]);
 
   return (
     <Paper sx={{ 
@@ -389,87 +438,69 @@ function WordCloudSection({
       )}
 
       {/* Part Subtitle */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
         <Cloud size={isPresentation ? 24 : 18} color="#ce93d8" />
         <Typography variant={isPresentation ? "h5" : "subtitle1"} sx={{ color: 'rgba(255,255,255,0.9)', fontWeight: 600 }}>
-          {currentPart?.prompt || `Part ${activePartIndex + 1}`} Wordcloud
+          {currentPart?.prompt || `Part ${activePartIndex + 1}`} Word Cloud
         </Typography>
       </Box>
 
-      {/* Word Cloud Fluid Canvas */}
-      <Box sx={{ 
-        minHeight: isPresentation ? 320 : 200, 
-        p: { xs: 2, sm: 4 }, 
-        display: 'flex', 
-        flexWrap: 'wrap', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        gap: { xs: 1.5, sm: 3 },
-        bgcolor: 'rgba(0,0,0,0.2)',
-        borderRadius: 2,
-        border: '1px dashed rgba(255,255,255,0.1)'
-      }}>
+      {/* Word Cloud Canvas Container */}
+      <Box 
+        ref={containerRef}
+        sx={{ 
+          width: '100%',
+          minHeight: isPresentation ? 420 : isMobile ? 240 : 320, 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          bgcolor: 'rgba(0,0,0,0.25)',
+          borderRadius: 2,
+          border: '1px dashed rgba(255,255,255,0.1)',
+          overflow: 'hidden',
+          position: 'relative'
+        }}
+      >
         {(!currentPart || !currentPart.words || currentPart.words.length === 0) ? (
-          <Typography variant={isPresentation ? "h5" : "body1"} sx={{ color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>
+          <Typography variant={isPresentation ? "h5" : "body1"} sx={{ color: 'rgba(255,255,255,0.4)', fontStyle: 'italic', p: 4, textAlign: 'center' }}>
             No crowd responses recorded for this part yet.
           </Typography>
         ) : (
-          currentPart.words.map((item, idx) => {
-            // Proportional font sizing
-            const minSize = isPresentation ? 1.6 : isMobile ? 0.9 : 1.1;
-            const maxSize = isPresentation ? 4.2 : isMobile ? 2.0 : 2.6;
-            const spread = maxCount - minCount || 1;
-            const fontSize = minSize + ((item.count - minCount) / spread) * (maxSize - minSize);
-            const color = CLOUD_COLORS[idx % CLOUD_COLORS.length];
-
-            return (
-              <Box 
-                key={idx} 
-                sx={{ 
-                  display: 'inline-flex', 
-                  alignItems: 'center', 
-                  gap: 0.8,
-                  px: { xs: 1.5, sm: 2 },
-                  py: { xs: 0.5, sm: 1 },
-                  borderRadius: 3,
-                  bgcolor: 'rgba(255, 255, 255, 0.04)',
-                  border: `1px solid ${color}40`,
-                  boxShadow: `0 0 12px ${color}15`,
-                  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                  '&:hover': {
-                    transform: 'scale(1.08)',
-                    boxShadow: `0 0 20px ${color}40`,
-                    bgcolor: 'rgba(255, 255, 255, 0.08)'
-                  }
-                }}
-              >
-                <Typography 
-                  component="span" 
-                  sx={{ 
-                    fontSize: `${fontSize}rem`, 
-                    fontWeight: item.count > 1 ? 800 : 600, 
-                    color: color,
-                    lineHeight: 1
-                  }}
-                >
-                  {item.text}
-                </Typography>
-                <Chip 
-                  label={item.count} 
-                  size="small" 
-                  sx={{ 
-                    height: isPresentation ? 24 : 18, 
-                    fontSize: isPresentation ? '0.85rem' : '0.65rem',
-                    bgcolor: `${color}25`,
-                    color: color,
-                    fontWeight: 800
-                  }} 
-                />
-              </Box>
-            );
-          })
+          <canvas 
+            ref={canvasRef} 
+            style={{ 
+              display: 'block', 
+              maxWidth: '100%'
+            }} 
+          />
         )}
       </Box>
+
+      {/* Response Frequency Summary Chips */}
+      {currentPart?.words && currentPart.words.length > 0 && (
+        <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+          <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', display: 'block', mb: 1 }}>
+            Top Submitted Responses ({currentPart.words.length} distinct answers):
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            {currentPart.words.slice(0, 15).map((w, idx) => (
+              <Chip 
+                key={idx}
+                label={`${w.text} (${w.count})`}
+                size="small"
+                variant="outlined"
+                sx={{ 
+                  color: CLOUD_COLORS[idx % CLOUD_COLORS.length],
+                  borderColor: `${CLOUD_COLORS[idx % CLOUD_COLORS.length]}50`,
+                  bgcolor: `${CLOUD_COLORS[idx % CLOUD_COLORS.length]}10`,
+                  fontWeight: 600,
+                  fontSize: isPresentation ? '0.9rem' : '0.75rem'
+                }}
+              />
+            ))}
+          </Box>
+        </Box>
+      )}
     </Paper>
   );
 }

@@ -66,6 +66,7 @@ export default function LiveScorer({ event, teams: initialTeams, sets, onExit }:
   const [speedTimerTimeLeft, setSpeedTimerTimeLeft] = useState<number>(0);
 
   const isDigital = !!(event.digital_input || event.game_mode === 'digital');
+  const isDigitalOrSpeed = event.game_mode === 'speed' || isDigital;
 
   // Fetch Review Queue
   const fetchReviewQueue = useCallback(async () => {
@@ -542,32 +543,89 @@ export default function LiveScorer({ event, teams: initialTeams, sets, onExit }:
       </Box>
 
       {/* Persistent Navigation Footer */}
-      <Paper sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, p: 2, bgcolor: 'background.paper', borderTop: '2px solid #333' }}>
-        <Stack direction="row" spacing={2} justifyContent="center" alignItems="center">
-            <Button 
-                variant="outlined" 
-                size="large"
-                startIcon={<ChevronLeft />} 
-                disabled={currentIndex === 0}
-                onClick={() => syncSlide(currentIndex - 1)}
-            >
-                Back
-            </Button>
-            <Box sx={{ textAlign: 'center', minWidth: 120 }}>
-                <Typography variant="h6">{currentIndex + 1} / {slides.length}</Typography>
-                <Typography variant="caption" color="text.secondary">Slide Sequence</Typography>
-            </Box>
-            <Button 
-                variant="contained" 
-                size="large"
-                endIcon={<ChevronRight />} 
-                disabled={currentIndex === slides.length - 1 || speedTimerActive}
-                onClick={() => syncSlide(currentIndex + 1)}
-            >
-                Next
-            </Button>
-        </Stack>
-      </Paper>
+      {(() => {
+        const isQuestionToResult = isDigitalOrSpeed && currentSlide?.type === 'question' && slides[currentIndex + 1]?.type === 'question_results';
+        const nextQuestionInSetIndex = isQuestionToResult 
+          ? slides.findIndex((s, idx) => idx > currentIndex && s.roundNumber === currentSlide.roundNumber && s.type === 'question')
+          : -1;
+        const hasNextQuestionInSet = nextQuestionInSetIndex !== -1;
+        const nextIntermissionIndex = isQuestionToResult && !hasNextQuestionInSet
+          ? (() => {
+              const roundIntermission = slides.findIndex((s, idx) => idx > currentIndex && s.roundNumber === currentSlide.roundNumber && s.type === 'intermission');
+              if (roundIntermission !== -1) return roundIntermission;
+              const anyIntermission = slides.findIndex((s, idx) => idx > currentIndex && (s.type === 'intermission' || s.type === 'event_end'));
+              return anyIntermission !== -1 ? anyIntermission : currentIndex + 1;
+            })()
+          : -1;
+
+        return (
+          <Paper sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, p: { xs: 1.5, sm: 2 }, bgcolor: 'background.paper', borderTop: '2px solid #333', zIndex: 1100 }}>
+            <Stack direction="row" spacing={{ xs: 1, sm: 2 }} justifyContent="center" alignItems="center" flexWrap="wrap">
+                <Button 
+                    variant="outlined" 
+                    size={isMobile ? "medium" : "large"}
+                    startIcon={<ChevronLeft />} 
+                    disabled={currentIndex === 0}
+                    onClick={() => syncSlide(currentIndex - 1)}
+                >
+                    Back
+                </Button>
+                <Box sx={{ textAlign: 'center', minWidth: { xs: 70, sm: 120 } }}>
+                    <Typography variant={isMobile ? "body1" : "h6"}>{currentIndex + 1} / {slides.length}</Typography>
+                    <Typography variant="caption" color="text.secondary">Slide Sequence</Typography>
+                </Box>
+                {isQuestionToResult ? (
+                  <>
+                    <Button 
+                        variant="contained" 
+                        color="secondary"
+                        size={isMobile ? "medium" : "large"}
+                        endIcon={<ChevronRight />} 
+                        disabled={speedTimerActive}
+                        onClick={() => syncSlide(currentIndex + 1)}
+                    >
+                        Results
+                    </Button>
+                    {hasNextQuestionInSet ? (
+                      <Button 
+                          variant="contained" 
+                          color="primary"
+                          size={isMobile ? "medium" : "large"}
+                          endIcon={<ChevronRight />} 
+                          disabled={speedTimerActive}
+                          onClick={() => syncSlide(nextQuestionInSetIndex)}
+                      >
+                          Next Question
+                      </Button>
+                    ) : (
+                      <Button 
+                          variant="contained" 
+                          color="warning"
+                          size={isMobile ? "medium" : "large"}
+                          endIcon={<ChevronRight />} 
+                          disabled={speedTimerActive}
+                          onClick={() => syncSlide(nextIntermissionIndex)}
+                      >
+                          Intermission
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <Button 
+                      variant="contained" 
+                      color="primary"
+                      size={isMobile ? "medium" : "large"}
+                      endIcon={<ChevronRight />} 
+                      disabled={currentIndex === slides.length - 1 || speedTimerActive}
+                      onClick={() => syncSlide(currentIndex + 1)}
+                  >
+                      Next
+                  </Button>
+                )}
+            </Stack>
+          </Paper>
+        );
+      })()}
 
       {/* Mass Scoring Modal */}
       <Dialog 

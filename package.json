@@ -9,7 +9,8 @@
     "build": "cd client && npm run build",
     "init-db": "tsx -e 'import { initDb } from \"./server/db.js\"; initDb()'",
     "db:dump": "./scripts/dump_db.sh",
-    "db:restore": "./scripts/restore_db.sh"
+    "db:restore": "./scripts/restore_db.sh",
+    "import:jeopardy": "tsx scripts/import_jeopardy.ts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
